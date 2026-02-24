@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { View, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Text, Button } from 'react-native-paper';
-import { Play, Trophy, Dumbbell, Flame, TrendingUp, Calendar, Clock, BarChart2 } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
+import React, { useState, useCallback } from 'react';
+import { View, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { Text } from 'react-native-paper';
+import { Play, Trophy, Dumbbell, Flame } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { MotiView } from 'moti';
+import { MotiPressable } from 'moti/interactions';
 import { useAuth } from '../hooks/useAuth';
 import { useProgress } from '../hooks/useProgress';
 import { appColors, appFonts, appTypography } from '../theme';
 import { AnimatedScreen } from '../components/AnimatedScreen';
-import { AnimatedListItem } from '../components/AnimatedListItem';
-import { MotiView } from 'moti';
 
 export const DashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const { user } = useAuth();
@@ -16,15 +16,19 @@ export const DashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) =
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => { if (user) fetchStats(); }, [user]);
-
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         if (!user) return;
         setLoading(true);
         const data = await getDashboardStats();
         setStats(data);
         setLoading(false);
-    };
+    }, [user, getDashboardStats]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchStats();
+        }, [fetchStats])
+    );
 
     if (loading) {
         return (
@@ -34,140 +38,216 @@ export const DashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) =
         );
     }
 
-    const { weeklyWorkouts, weeklyVolume, streak, lastWorkout, bodyWeight, bodyWeightChange, trends, topPrMonth } = stats || {};
+    const {
+        weeklyWorkouts,
+        weeklyVolume,
+        prevWeekVolume,
+        prsThisWeek,
+        weeklyGoal,
+        streak,
+        bodyWeight,
+        bodyWeightChange,
+        trends,
+        topPrMonth
+    } = stats || {};
+
+    const consistencyProgress = Math.min((weeklyWorkouts || 0) / (weeklyGoal || 4), 1);
+    const volumeChange = prevWeekVolume > 0 ? ((weeklyVolume - prevWeekVolume) / prevWeekVolume) * 100 : 0;
+
+    const handleStartWorkout = () => {
+        import('expo-haptics').then(Haptics => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+        navigation.navigate('SelectTemplate');
+    };
 
     return (
         <AnimatedScreen style={styles.container}>
             <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 60, paddingBottom: 100 }}>
-                {/* 1. Big Start Workout Button */}
-                <MotiView from={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring' }}>
-                    <Button
-                        mode="contained"
-                        onPress={() => navigation.navigate('SelectTemplate')}
-                        buttonColor={appColors.accent}
-                        textColor="#000"
-                        style={styles.ctaBtn}
-                        contentStyle={styles.ctaInner}
-                        labelStyle={styles.ctaLabel}
-                        icon={() => <Play size={24} color="#000" fill="#000" />}
+
+                {/* 🏆 PR Reward Badge (Conditional) */}
+                {prsThisWeek > 0 && (
+                    <MotiView
+                        from={{ opacity: 0, translateY: -20 }}
+                        animate={{ opacity: 1, translateY: 0 }}
+                        style={styles.prBadge}
                     >
-                        START WORKOUT
-                    </Button>
+                        <Trophy size={16} color={appColors.accent} fill={appColors.accent} />
+                        <Text style={styles.prBadgeText}>{prsThisWeek} NEW PR{prsThisWeek > 1 ? 'S' : ''} THIS WEEK</Text>
+                    </MotiView>
+                )}
+
+                {/* 1. Big Start Workout Button (PRIMARY ACTION) */}
+                <MotiView from={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'timing', duration: 400 }}>
+                    <MotiPressable
+                        onPress={handleStartWorkout}
+                        animate={({ pressed }) => {
+                            'worklet';
+                            return {
+                                scale: pressed ? 0.97 : 1,
+                            };
+                        }}
+                        transition={{ type: 'spring', damping: 15 }}
+                        style={styles.ctaBtnContainer}
+                    >
+                        <View style={styles.ctaInner}>
+                            <View style={styles.ctaLeft}>
+                                <Play size={20} color="#000" fill="#000" style={{ marginRight: 8 }} />
+                                <Text style={styles.ctaLabel}>START WORKOUT</Text>
+                            </View>
+                        </View>
+                    </MotiPressable>
                 </MotiView>
 
-                {/* 2. Body Weight */}
-                <View style={styles.metricRow}>
-                    <View style={[styles.card, { flex: 1 }]}>
-                        <View style={styles.cardHeader}>
-                            <TrendingUp size={16} color={appColors.textTertiary} />
-                            <Text style={styles.cardLabel}>BODY WEIGHT</Text>
-                        </View>
-                        <View style={styles.valueRow}>
-                            <Text style={styles.bigValue}>{bodyWeight || '—'}</Text>
-                            <Text style={styles.unit}>kg</Text>
-                            {bodyWeightChange !== 0 && (
-                                <Text style={[styles.changeText, { color: bodyWeightChange < 0 ? appColors.success : appColors.danger }]}>
-                                    {bodyWeightChange < 0 ? '↓' : '↑'} {Math.abs(bodyWeightChange).toFixed(1)}
-                                </Text>
+                {/* 2. Weekly Consistency (RETENTION DRIVER) */}
+                <Text style={styles.sectionTitle}>WEEKLY CONSISTENCY</Text>
+                <MotiPressable
+                    onPress={() => { }}
+                    animate={({ pressed }) => {
+                        'worklet';
+                        return {
+                            scale: pressed ? 0.98 : 1,
+                        };
+                    }}
+                    style={[styles.card, styles.shadowed]}
+                >
+                    <View style={styles.consistencyRow}>
+                        <View>
+                            <View style={styles.valueRow}>
+                                <Text style={styles.bigValue}>{weeklyWorkouts}</Text>
+                                <Text style={styles.unit}>/ {weeklyGoal} workouts</Text>
+                            </View>
+                            {streak > 0 && (
+                                <Text style={styles.streakText}>🔥 {streak} week streak</Text>
                             )}
                         </View>
+                        <View style={styles.iconCircleSubtle}>
+                            <Flame size={24} color={consistencyProgress >= 1 ? appColors.accent : appColors.textTertiary} fill={consistencyProgress >= 1 ? appColors.accent : 'transparent'} />
+                        </View>
                     </View>
-                </View>
 
-                {/* 3. Weekly Consistency */}
-                <View style={styles.metricRow}>
-                    <View style={[styles.card, { flex: 1 }]}>
-                        <View style={styles.cardHeader}>
-                            <Flame size={18} color={streak > 0 ? appColors.accent : appColors.textTertiary} fill={streak > 0 ? appColors.accent : 'transparent'} />
-                            <Text style={styles.cardLabel}>WEEKLY CONSISTENCY</Text>
+                    <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBarBg}>
+                            <MotiView
+                                from={{ width: '0%' }}
+                                animate={{ width: `${consistencyProgress * 100}%` }}
+                                transition={{ type: 'spring', damping: 15 }}
+                                style={styles.progressBarFill}
+                            />
                         </View>
-                        <View style={styles.valueRow}>
-                            <Text style={styles.bigValue}>{weeklyWorkouts}</Text>
-                            <Text style={styles.unit}>sessions this week</Text>
-                        </View>
-                        {streak > 0 && (
-                            <Text style={styles.streakText}>🔥 {streak} week streak</Text>
+                        <Text style={styles.progressGoalLabel}>Goal: {weeklyGoal} per week</Text>
+                    </View>
+                </MotiPressable>
+
+                {/* 3. Body Weight (CLINICAL METRIC) */}
+                <Text style={styles.sectionTitle}>BODY WEIGHT</Text>
+                <MotiPressable
+                    onPress={() => { }}
+                    animate={({ pressed }) => {
+                        'worklet';
+                        return {
+                            scale: pressed ? 0.98 : 1,
+                        };
+                    }}
+                    style={[styles.card, styles.shadowed]}
+                >
+                    <View style={styles.valueRow}>
+                        <Text style={styles.bigValue}>{bodyWeight || '—'}</Text>
+                        <Text style={[styles.unit, { marginLeft: 4 }]}>kg</Text>
+                        {bodyWeightChange !== 0 && (
+                            <View style={[styles.pillBadge, { backgroundColor: (bodyWeightChange < 0 ? appColors.success : appColors.danger) + '15' }]}>
+                                <Text style={[styles.pillBadgeText, { color: bodyWeightChange < 0 ? appColors.success : appColors.danger }]}>
+                                    {bodyWeightChange < 0 ? '↓' : '↑'} {Math.abs(bodyWeightChange).toFixed(1)}
+                                </Text>
+                            </View>
                         )}
                     </View>
-                </View>
+                </MotiPressable>
 
-                {/* 4. Last Workout Summary */}
-                {lastWorkout && (
+                {/* 4. Strength Trend Indicator (PROGRESS VISUAL) */}
+                {trends && trends.length > 0 && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>LAST WORKOUT</Text>
-                        <TouchableOpacity
-                            style={styles.summaryCard}
-                            activeOpacity={0.8}
-                            onPress={() => navigation.navigate('History')}
-                        >
-                            <View style={styles.summaryContent}>
-                                <View style={styles.summaryMain}>
-                                    <Text style={styles.summaryName}>{lastWorkout.name}</Text>
-                                    <View style={styles.summaryMeta}>
-                                        <View style={styles.metaItem}>
-                                            <Clock size={14} color={appColors.textSecondary} />
-                                            <Text style={styles.metaText}>{lastWorkout.duration} min</Text>
+                        <Text style={styles.sectionTitle}>STRENGTH TRENDS (30D)</Text>
+                        <View style={styles.trendGrid}>
+                            {trends.map((t: any, i: number) => (
+                                <MotiPressable
+                                    key={i}
+                                    onPress={() => { }}
+                                    animate={({ pressed }) => {
+                                        'worklet';
+                                        return {
+                                            scale: pressed ? 0.98 : 1,
+                                        };
+                                    }}
+                                    style={[styles.trendItem, styles.shadowed]}
+                                >
+                                    <Text style={styles.trendEx}>{t.name}</Text>
+                                    <View style={styles.trendValueRow}>
+                                        <Text style={styles.trendWeight}>{t.currentMax}kg</Text>
+                                        <View style={[styles.pillBadge, { backgroundColor: (t.change > 0 ? appColors.success : t.change < 0 ? appColors.danger : appColors.textTertiary) + '15' }]}>
+                                            <Text style={[styles.pillBadgeText, { color: t.change > 0 ? appColors.success : t.change < 0 ? appColors.danger : appColors.textTertiary }]}>
+                                                {t.change > 0 ? '↑' : t.change < 0 ? '↓' : '→'} {Math.abs(t.change)}kg
+                                            </Text>
                                         </View>
-                                        {lastWorkout.prs > 0 && (
-                                            <View style={[styles.metaItem, styles.prHighlight]}>
-                                                <Trophy size={14} color={appColors.accent} />
-                                                <Text style={[styles.metaText, { color: appColors.accent, fontFamily: appFonts.bold }]}>
-                                                    +{lastWorkout.prs} PR{lastWorkout.prs > 1 ? 's' : ''}
-                                                </Text>
-                                            </View>
-                                        )}
                                     </View>
-                                </View>
-                                <BarChart2 size={24} color={appColors.borderLight} />
-                            </View>
-                        </TouchableOpacity>
+                                </MotiPressable>
+                            ))}
+                        </View>
                     </View>
                 )}
 
-                {/* 5. Top PR This Month */}
+                {/* 5. Total Volume This Week (WORKHORSE METRIC) */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>TOTAL VOLUME THIS WEEK</Text>
+                    <MotiPressable
+                        onPress={() => { }}
+                        animate={({ pressed }) => {
+                            'worklet';
+                            return {
+                                scale: pressed ? 0.98 : 1,
+                            };
+                        }}
+                        style={[styles.card, styles.shadowed, { backgroundColor: appColors.inputBg + '40' }]}
+                    >
+                        <View style={styles.volumeRow}>
+                            <View>
+                                <Text style={styles.bigValue}>
+                                    {new Intl.NumberFormat().format(weeklyVolume)} <Text style={styles.unit}>kg</Text>
+                                </Text>
+                                {volumeChange !== 0 && (
+                                    <View style={[styles.pillBadge, { backgroundColor: (volumeChange > 0 ? appColors.success : appColors.danger) + '15', marginTop: 8, alignSelf: 'flex-start' }]}>
+                                        <Text style={[styles.pillBadgeText, { color: volumeChange > 0 ? appColors.success : appColors.danger }]}>
+                                            {volumeChange > 0 ? '↑' : '↓'} {Math.abs(volumeChange).toFixed(1)}% vs last week
+                                        </Text>
+                                    </View>
+                                )}
+                            </View>
+                            <Dumbbell size={24} color={appColors.textTertiary} />
+                        </View>
+                    </MotiPressable>
+                </View>
+
+                {/* 6. Top PR This Month (HIGHLIGHT) */}
                 {topPrMonth && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>TOP PR THIS MONTH</Text>
-                        <View style={styles.prMonthCard}>
+                        <Text style={styles.sectionTitle}>MONTHLY HIGHLIGHT</Text>
+                        <MotiPressable
+                            onPress={() => { }}
+                            animate={({ pressed }) => {
+                                'worklet';
+                                return {
+                                    scale: pressed ? 0.98 : 1,
+                                };
+                            }}
+                            style={[styles.prMonthCard, styles.shadowed]}
+                        >
                             <Trophy size={20} color={appColors.accent} />
                             <View style={{ flex: 1, marginLeft: 12 }}>
                                 <Text style={styles.prMonthEx}>{topPrMonth.name}</Text>
                                 <Text style={styles.prMonthLabel}>New Personal Best</Text>
                             </View>
                             <Text style={styles.prMonthWeight}>{topPrMonth.weight}kg</Text>
-                        </View>
+                        </MotiPressable>
                     </View>
                 )}
-
-                {/* 5. Strength Trend Indicator */}
-                {trends && trends.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>STRENGTH TRENDS (30D)</Text>
-                        <View style={styles.trendGrid}>
-                            {trends.map((t: any, i: number) => (
-                                <View key={i} style={styles.trendItem}>
-                                    <Text style={styles.trendEx}>{t.name}</Text>
-                                    <View style={styles.trendValueRow}>
-                                        <Text style={styles.trendWeight}>{t.currentMax}kg</Text>
-                                        {t.change !== 0 && (
-                                            <Text style={[styles.trendChange, { color: t.change > 0 ? appColors.success : appColors.danger }]}>
-                                                {t.change > 0 ? '↑' : '↓'} {Math.abs(t.change)}kg
-                                            </Text>
-                                        )}
-                                    </View>
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-                )}
-
-                {/* Bonus: Total Volume This Week */}
-                <View style={[styles.card, { marginTop: 20, borderLeftWidth: 0, backgroundColor: appColors.inputBg + '40' }]}>
-                    <Text style={[styles.cardLabel, { marginBottom: 6 }]}>TOTAL VOLUME THIS WEEK</Text>
-                    <Text style={styles.bigValue}>
-                        {new Intl.NumberFormat().format(weeklyVolume)} <Text style={{ fontSize: 16, color: appColors.textTertiary }}>kg</Text>
-                    </Text>
-                </View>
 
             </ScrollView>
         </AnimatedScreen>
@@ -179,11 +259,40 @@ const styles = StyleSheet.create({
     center: { justifyContent: 'center', alignItems: 'center' },
     scroll: { flex: 1, paddingHorizontal: 20 },
 
-    ctaBtn: { borderRadius: 16, marginBottom: 24, elevation: 8, shadowColor: appColors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
-    ctaInner: { height: 74 },
-    ctaLabel: { ...appTypography.h1, fontSize: 20, letterSpacing: 2, fontFamily: appFonts.black },
+    // PR Badge
+    prBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: appColors.accent + '15',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        alignSelf: 'center',
+        marginBottom: 20,
+        gap: 8,
+        borderWidth: 1,
+        borderColor: appColors.accent + '25'
+    },
+    prBadgeText: { ...appTypography.small, color: appColors.accent, fontFamily: appFonts.black, letterSpacing: 0.5 },
 
-    metricRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+    // CTA Button
+    ctaBtnContainer: {
+        backgroundColor: appColors.accent,
+        borderRadius: 18,
+        paddingVertical: 18,
+        paddingHorizontal: 24,
+        elevation: 6,
+        shadowColor: appColors.accent,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 10,
+    },
+    ctaInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    ctaLeft: { flexDirection: 'row', alignItems: 'center' },
+    ctaLabel: { ...appTypography.h1, fontSize: 18, color: '#000', fontFamily: appFonts.black, letterSpacing: 1 },
+
+    sectionTitle: { ...appTypography.small, color: '#888', letterSpacing: 0.5, fontFamily: appFonts.bold, fontSize: 10, textTransform: 'uppercase', marginTop: 28, marginBottom: 12 },
+
     card: {
         backgroundColor: appColors.cardBg,
         borderRadius: 16,
@@ -191,41 +300,55 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: appColors.border,
     },
-    cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-    cardLabel: { ...appTypography.small, color: appColors.textTertiary, fontFamily: appFonts.bold, letterSpacing: 1, textTransform: 'uppercase' },
+    shadowed: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+    },
+
+    consistencyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    iconCircleSubtle: { backgroundColor: appColors.cardBg, borderRadius: 20, width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+    progressBarContainer: { gap: 10 },
+    progressBarBg: { height: 8, backgroundColor: appColors.border, borderRadius: 4, overflow: 'hidden' },
+    progressBarFill: { height: '100%', backgroundColor: appColors.accent, borderRadius: 4 },
+    progressGoalLabel: { ...appTypography.small, color: appColors.textTertiary, fontSize: 11, fontFamily: appFonts.bold },
+
     valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-    bigValue: { ...appTypography.h1, fontSize: 32, color: '#fff' },
-    unit: { ...appTypography.body, color: appColors.textSecondary, fontSize: 14 },
-    changeText: { ...appTypography.body, fontFamily: appFonts.bold, fontSize: 14, marginLeft: 8 },
-    streakText: { ...appTypography.body, color: appColors.accent, fontFamily: appFonts.black, marginTop: 8, fontSize: 14 },
+    bigValue: { ...appTypography.h1, fontSize: 36, color: '#fff' },
+    unit: { ...appTypography.body, color: appColors.textSecondary, fontSize: 16 },
+    streakText: { ...appTypography.body, color: appColors.accent, fontFamily: appFonts.black, marginTop: 4, fontSize: 12 },
 
-    section: { marginTop: 24 },
-    sectionTitle: { ...appTypography.small, color: appColors.textTertiary, marginBottom: 12, letterSpacing: 1.5, fontFamily: appFonts.bold },
+    pillBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+    pillBadgeText: { ...appTypography.small, fontFamily: appFonts.black, fontSize: 11 },
 
-    summaryCard: { backgroundColor: appColors.cardBg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: appColors.border },
-    summaryContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    summaryMain: { flex: 1 },
-    summaryName: { ...appTypography.h2, color: '#fff', fontSize: 18, marginBottom: 8 },
-    summaryMeta: { flexDirection: 'row', gap: 16 },
-    metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    metaText: { ...appTypography.small, color: appColors.textSecondary, fontSize: 13 },
-    prHighlight: { backgroundColor: appColors.accent + '15', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-
-    trendGrid: { gap: 10 },
-    trendItem: { backgroundColor: appColors.cardBg, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: appColors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    section: { marginTop: 0 },
+    trendGrid: { gap: 12 },
+    trendItem: {
+        backgroundColor: appColors.cardBg,
+        borderRadius: 14,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderWidth: 1,
+        borderColor: appColors.border,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+    },
     trendEx: { ...appTypography.body, color: appColors.textSecondary, fontFamily: appFonts.bold },
     trendValueRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    trendWeight: { ...appTypography.h2, color: '#fff', fontSize: 16 },
-    trendChange: { ...appTypography.small, fontFamily: appFonts.bold, fontSize: 13 },
+    trendWeight: { ...appTypography.h2, color: '#fff', fontSize: 18 },
+
+    volumeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
     prMonthCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: appColors.accent + '15',
+        backgroundColor: appColors.accent + '08',
         padding: 18,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: appColors.accent + '30'
+        borderColor: appColors.accent + '20'
     },
     prMonthEx: { ...appTypography.h2, color: '#fff', fontSize: 18 },
     prMonthLabel: { ...appTypography.small, color: appColors.accent, fontSize: 12, marginTop: 2, fontFamily: appFonts.bold },

@@ -25,6 +25,7 @@ interface WorkoutContextType {
     removeExerciseFromSession: (sessionExerciseId: string) => Promise<{ error: string | null }>;
     clearWorkout: () => void;
     updateDefaultSets: (exerciseId: string, newDefault: number) => Promise<{ error: string | null }>;
+    deleteSession: (sessionId: string) => Promise<{ error: string | null }>;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | null>(null);
@@ -283,12 +284,39 @@ export const WorkoutProvider: React.FC<{ children: ReactNode }> = ({ children })
         return { error: err?.message || null };
     };
 
+    const deleteSession = async (sessionId: string) => {
+        try {
+            // 1. Get session exercises
+            const { data: se } = await supabase
+                .from('session_exercises')
+                .select('id')
+                .eq('workout_session_id', sessionId);
+
+            if (se && se.length > 0) {
+                const seIds = se.map(x => x.id);
+                // 2. Delete sets
+                await supabase.from('sets').delete().in('session_exercise_id', seIds);
+                // 3. Delete session exercises
+                await supabase.from('session_exercises').delete().eq('workout_session_id', sessionId);
+            }
+
+            // 4. Delete session
+            const { error } = await supabase.from('workout_sessions').delete().eq('id', sessionId);
+            if (error) throw error;
+
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message };
+        }
+    };
+
     return (
         <WorkoutContext.Provider
             value={{
                 session, activeExercises, loading, isFinishing, error,
                 startWorkout, updateSet, addSet, deleteSet,
                 finishWorkout, cancelWorkout, addExerciseToSession, removeExerciseFromSession, clearWorkout, updateDefaultSets,
+                deleteSession,
             }}
         >
             {children}

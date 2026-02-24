@@ -1,23 +1,26 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity, Dimensions, BackHandler } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
-import { Text, Divider, IconButton, Portal } from 'react-native-paper';
+import { MotiPressable } from 'moti/interactions';
+import { Text, Divider, Portal } from 'react-native-paper';
 import {
     History,
     Dumbbell,
     Scale,
     BarChart2,
     LogOut,
-    X
+    X,
+    User as UserIcon
 } from 'lucide-react-native';
 import { useAuth } from '../hooks/useAuth';
-import { appColors } from '../theme';
+import { appColors, appTypography, appFonts } from '../theme';
 
 const DRAWER_W = 280;
 
 interface DrawerItem {
-    icon: React.ReactNode;
+    icon: (color: string) => React.ReactNode;
     label: string;
+    routeName: string;
     onPress: () => void;
 }
 
@@ -28,7 +31,11 @@ interface Props {
 }
 
 export const SideDrawer: React.FC<Props> = ({ visible, onClose, navigation }) => {
-    const { signOut } = useAuth();
+    const { user, signOut } = useAuth();
+
+    // Get current route name to highlight active item
+    const state = navigation.getState();
+    const currentRoute = state?.routes[state.index]?.name === 'Start' ? 'Dashboard' : (state?.routes[state.index]?.name || 'Dashboard');
 
     useEffect(() => {
         const handler = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -38,28 +45,35 @@ export const SideDrawer: React.FC<Props> = ({ visible, onClose, navigation }) =>
         return () => handler.remove();
     }, [visible]);
 
-    const items: DrawerItem[] = [
+    const items: DrawerItem[] = useMemo(() => [
         {
-            icon: <History size={22} color={appColors.textSecondary} />,
+            icon: (color: string) => <History size={22} color={color} />,
             label: 'Workout History',
+            routeName: 'History',
             onPress: () => { onClose(); navigation.navigate('History'); }
         },
         {
-            icon: <Dumbbell size={22} color={appColors.textSecondary} />,
-            label: 'Exercises',
-            onPress: () => { onClose(); navigation.navigate('Exercises'); }
+            icon: (color: string) => <BarChart2 size={22} color={color} />,
+            label: 'Progress',
+            routeName: 'Progress',
+            onPress: () => { onClose(); navigation.navigate('Progress'); }
         },
         {
-            icon: <Scale size={22} color={appColors.textSecondary} />,
+            icon: (color: string) => <Scale size={22} color={color} />,
             label: 'Body Tracking',
+            routeName: 'Body',
             onPress: () => { onClose(); navigation.navigate('Body'); }
         },
         {
-            icon: <BarChart2 size={22} color={appColors.textSecondary} />,
-            label: 'Progress',
-            onPress: () => { onClose(); navigation.navigate('Progress'); }
+            icon: (color: string) => <Dumbbell size={22} color={color} />,
+            label: 'Exercises',
+            routeName: 'Exercises',
+            onPress: () => { onClose(); navigation.navigate('Exercises'); }
         },
-    ];
+    ], [navigation, onClose]);
+
+    const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+    const userEmail = user?.email || 'No email provided';
 
     return (
         <Portal>
@@ -85,30 +99,80 @@ export const SideDrawer: React.FC<Props> = ({ visible, onClose, navigation }) =>
                             transition={{ type: 'timing', duration: 300 }}
                             style={styles.drawer}
                         >
-                            <View style={styles.drawerHeader}>
-                                <Text style={styles.appTitle}>LiftLog</Text>
-                                <TouchableOpacity onPress={onClose}>
-                                    <X size={24} color={appColors.textTertiary} />
-                                </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.drawerContent}>
-                                {items.map((item, i) => (
-                                    <TouchableOpacity key={i} style={styles.drawerItem} onPress={item.onPress} activeOpacity={0.6}>
-                                        <View style={styles.drawerIconContainer}>{item.icon}</View>
-                                        <Text style={styles.drawerLabel}>{item.label}</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-
-                            <Divider style={{ backgroundColor: appColors.border }} />
-
-                            <TouchableOpacity style={styles.drawerItem} onPress={() => { onClose(); signOut(); }} activeOpacity={0.6}>
-                                <View style={styles.drawerIconContainer}>
-                                    <LogOut size={22} color={appColors.danger} />
+                            {/* 1. Brand Logo */}
+                            <View style={styles.brandContainer}>
+                                <View style={styles.brandRow}>
+                                    <Dumbbell size={28} color={appColors.accent} strokeWidth={3} />
+                                    <Text style={styles.appTitle}>LiftLog</Text>
                                 </View>
-                                <Text style={[styles.drawerLabel, { color: appColors.danger }]}>Sign Out</Text>
-                            </TouchableOpacity>
+                                <View style={styles.brandUnderline} />
+                            </View>
+
+                            {/* 2. User Header Section */}
+                            <View style={styles.userSection}>
+                                <View style={styles.avatar}>
+                                    <UserIcon size={32} color="#fff" />
+                                </View>
+                                <View style={styles.userInfo}>
+                                    <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
+                                    <Text style={styles.userEmail} numberOfLines={1}>{userEmail}</Text>
+                                </View>
+                            </View>
+
+                            <Divider style={styles.divider} />
+
+                            {/* 3. Navigation Items */}
+                            <View style={styles.drawerContent}>
+                                {items.map((item, i) => {
+                                    const isActive = currentRoute === item.routeName;
+                                    return (
+                                        <MotiPressable
+                                            key={i}
+                                            onPress={item.onPress}
+                                            animate={({ pressed }) => {
+                                                'worklet';
+                                                return {
+                                                    scale: pressed ? 0.98 : 1,
+                                                    backgroundColor: pressed || isActive ? '#1A1A1A' : 'transparent',
+                                                };
+                                            }}
+                                            style={[styles.drawerItem, isActive && styles.activeItem]}
+                                        >
+                                            {isActive && <View style={styles.activeBar} />}
+                                            <View style={styles.drawerIconContainer}>
+                                                {item.icon(isActive ? appColors.accent : appColors.textSecondary)}
+                                            </View>
+                                            <Text style={[styles.drawerLabel, isActive && styles.activeLabel]}>
+                                                {item.label}
+                                            </Text>
+                                        </MotiPressable>
+                                    );
+                                })}
+                            </View>
+
+                            <View style={styles.bottomSection}>
+                                <Divider style={styles.divider} />
+                                <MotiPressable
+                                    onPress={() => { onClose(); signOut(); }}
+                                    animate={({ pressed }) => {
+                                        'worklet';
+                                        return {
+                                            scale: pressed ? 0.98 : 1,
+                                            backgroundColor: pressed ? '#1A1A1A' : 'transparent',
+                                        };
+                                    }}
+                                    style={styles.drawerItem}
+                                >
+                                    <View style={styles.drawerIconContainer}>
+                                        <LogOut size={22} color="#FF4D4D" />
+                                    </View>
+                                    <Text style={[styles.drawerLabel, { color: '#FF4D4D' }]}>Sign Out</Text>
+                                </MotiPressable>
+
+                                <View style={styles.footer}>
+                                    <Text style={styles.versionText}>LiftLog v1.0</Text>
+                                </View>
+                            </View>
                         </MotiView>
                     </View>
                 )}
@@ -118,22 +182,117 @@ export const SideDrawer: React.FC<Props> = ({ visible, onClose, navigation }) =>
 };
 
 const styles = StyleSheet.create({
-    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100 },
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100 },
     drawer: {
         position: 'absolute', top: 0, left: 0, bottom: 0,
         width: DRAWER_W, backgroundColor: appColors.cardBg,
         borderRightWidth: 1, borderRightColor: appColors.border,
-        zIndex: 101, paddingTop: 64,
+        zIndex: 101,
     },
-    drawerHeader: {
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: 20, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: appColors.border,
+    // Branding
+    brandContainer: {
+        paddingTop: Dimensions.get('window').height * 0.08,
+        paddingHorizontal: 24,
+        paddingBottom: 24,
     },
-    appTitle: { fontSize: 20, fontWeight: '900', color: '#fff', letterSpacing: 4 },
-    drawerContent: { paddingVertical: 8 },
+    brandRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    appTitle: {
+        fontSize: 28,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: 2,
+        fontFamily: appFonts.black,
+    },
+    brandUnderline: {
+        width: 40,
+        height: 3,
+        backgroundColor: appColors.accent,
+        marginTop: 8,
+        borderRadius: 2,
+    },
+    // User Header
+    userSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+        gap: 16,
+    },
+    avatar: {
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        backgroundColor: '#1A1A1A',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    userInfo: {
+        flex: 1,
+    },
+    userName: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '700',
+        fontFamily: appFonts.bold,
+    },
+    userEmail: {
+        color: appColors.textTertiary,
+        fontSize: 13,
+        marginTop: 2,
+    },
+    // Navigation
+    drawerContent: { flex: 1, paddingVertical: 12 },
     drawerItem: {
-        flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 16,
+        position: 'relative',
     },
-    drawerIconContainer: { marginRight: 16, width: 28, alignItems: 'center' },
-    drawerLabel: { color: '#fff', fontSize: 16, fontWeight: '600' },
+    activeItem: {
+        backgroundColor: '#1A1A1A',
+    },
+    activeBar: {
+        position: 'absolute',
+        left: 0,
+        top: 12,
+        bottom: 12,
+        width: 3,
+        backgroundColor: appColors.accent,
+        borderTopRightRadius: 2,
+        borderBottomRightRadius: 2,
+    },
+    drawerIconContainer: { marginRight: 20, width: 24, alignItems: 'center' },
+    drawerLabel: {
+        color: appColors.textSecondary,
+        fontSize: 16,
+        fontWeight: '600',
+        fontFamily: appFonts.bold,
+    },
+    activeLabel: {
+        color: appColors.accent,
+    },
+    // Bottom Section
+    bottomSection: {
+        paddingBottom: Dimensions.get('window').height * 0.03,
+    },
+    footer: {
+        alignItems: 'center',
+        paddingTop: 16,
+    },
+    versionText: {
+        color: appColors.textTertiary,
+        fontSize: 12,
+        opacity: 0.5,
+    },
+    divider: {
+        backgroundColor: appColors.border,
+        marginHorizontal: 24,
+    },
 });

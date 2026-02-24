@@ -90,12 +90,14 @@ export const useProgress = () => {
         try {
             const now = new Date();
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
             // 1. Weekly Workouts & Volume
             const { data: weekSessions, error: wsErr } = await supabase
                 .from('workout_sessions')
                 .select(`
                     id, date, duration_minutes,
+                    template:workout_templates(name),
                     session_exercises(
                         id,
                         sets(weight, reps)
@@ -108,6 +110,7 @@ export const useProgress = () => {
             if (wsErr) throw wsErr;
 
             let weeklyVolume = 0;
+            let prsThisWeek = 0;
             weekSessions?.forEach(s => {
                 s.session_exercises?.forEach((se: any) => {
                     se.sets?.forEach((set: any) => {
@@ -116,30 +119,103 @@ export const useProgress = () => {
                 });
             });
 
-            // 2. Streak Calculation (Consecutive weeks with workouts)
-            const { data: allSessions, error: asErr } = await supabase
+            // Calculate PRs this week
+            const { data: recentSets } = await supabase
+                .from('sets')
+                .select(`
+                    weight,
+                    session_exercise!inner(
+                        exercise_id,
+                        session:workout_sessions!inner(date)
+                    )
+                `)
+                .eq('session_exercise.session.user_id', user.id)
+                .eq('session_exercise.session.status', 'completed')
+                .gte('session_exercise.session.date', weekAgo.toISOString());
+
+            if (recentSets) {
+                // To find if a set is a PR, we need to know if it's > former max
+                // For simplicity and performance, we'll check each exercise max weight in this week vs before this week
+                const exerciseMaxesThisWeek: Record<string, number> = {};
+                recentSets.forEach((s: any) => {
+                    const exId = s.session_exercise.exercise_id;
+                    if (!exerciseMaxesThisWeek[exId] || s.weight > exerciseMaxesThisWeek[exId]) {
+                        exerciseMaxesThisWeek[exId] = s.weight;
+                    }
+                });
+
+                for (const exId in exerciseMaxesThisWeek) {
+                    const { data: formerMaxData } = await supabase
+                        .from('sets')
+                        .select('weight')
+                        .eq('session_exercise.exercise_id', exId)
+                        .eq('session_exercise.session.user_id', user.id)
+                        .eq('session_exercise.session.status', 'completed')
+                        .lt('session_exercise.session.date', weekAgo.toISOString())
+                        .order('weight', { ascending: false })
+                        .limit(1);
+
+                    const formerMax = formerMaxData?.[0]?.weight || 0;
+                    if (exerciseMaxesThisWeek[exId] > formerMax) {
+                        prsThisWeek++;
+                    }
+                }
+            }
+
+            // 2. Previous Week Volume (7-14 days ago)
+            const { data: prevWeekSessions } = await supabase
+                .from('workout_sessions')
+                .select('session_exercises(sets(weight, reps))')
+                .eq('user_id', user.id)
+                .eq('status', 'completed')
+                .gte('date', twoWeeksAgo.toISOString())
+                .lt('date', weekAgo.toISOString());
+
+            let prevWeekVolume = 0;
+            prevWeekSessions?.forEach(s => {
+                s.session_exercises?.forEach((se: any) => {
+                    se.sets?.forEach((set: any) => {
+                        if (set.weight && set.reps) prevWeekVolume += set.weight * set.reps;
+                    });
+                });
+            });
+
+            // 3. Last Workout Subtext
+            const { data: lastSession } = await supabase
+                .from('workout_sessions')
+                .select('date, template:workout_templates(name)')
+                .eq('user_id', user.id)
+                .eq('status', 'completed')
+                .order('date', { ascending: false })
+                .limit(1)
+                .single();
+
+            let lastWorkoutSubtext = '';
+            if (lastSession) {
+                const daysAgo = Math.floor((now.getTime() - new Date(lastSession.date).getTime()) / (1000 * 60 * 60 * 24));
+                const daysText = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`;
+                lastWorkoutSubtext = `${(lastSession as any).template?.name || 'Custom'} • ${daysText}`;
+            }
+
+            // 4. Streak Calculation
+            const { data: allSessions } = await supabase
                 .from('workout_sessions')
                 .select('date')
                 .eq('user_id', user.id)
                 .eq('status', 'completed')
                 .order('date', { ascending: false });
 
-            if (asErr) throw asErr;
-
             let streak = 0;
             if (allSessions && allSessions.length > 0) {
                 const workoutWeeks = new Set();
                 allSessions.forEach(s => {
                     const d = new Date(s.date);
-                    // Get a unique week identifier (Year-WeekNumber)
                     const startOfYear = new Date(d.getFullYear(), 0, 1);
                     const weekNum = Math.ceil((((d.getTime() - startOfYear.getTime()) / 86400000) + startOfYear.getDay() + 1) / 7);
                     workoutWeeks.add(`${d.getFullYear()}-${weekNum}`);
                 });
 
                 const sortedWeeks = Array.from(workoutWeeks).sort().reverse() as string[];
-
-                // Current week
                 const dNow = new Date();
                 const startOfYearNow = new Date(dNow.getFullYear(), 0, 1);
                 const currentWeekNum = Math.ceil((((dNow.getTime() - startOfYearNow.getTime()) / 86400000) + startOfYearNow.getDay() + 1) / 7);
@@ -154,11 +230,8 @@ export const useProgress = () => {
                         streak++;
                         foundThisWeek = true;
                     } else {
-                        // Check if it's the week immediately before the last one we counted
                         const [y, w] = weekId.split('-').map(Number);
                         const [ly, lw] = lastWeekId.split('-').map(Number);
-
-                        // Simple check: decrease week by 1, handle year boundary
                         let expectedW = lw - 1;
                         let expectedY = ly;
                         if (expectedW === 0) { expectedW = 52; expectedY--; }
@@ -166,70 +239,15 @@ export const useProgress = () => {
                         if (y === expectedY && w === expectedW) {
                             streak++;
                         } else if (i === 0 && !foundThisWeek) {
-                            // If first session is last week, and we didn't work out this week, streak starts from 1 if it's last week
-                            if (y === expectedY && w === expectedW) {
-                                streak = 1;
-                            } else {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
+                            if (y === expectedY && w === expectedW) streak = 1;
+                            else break;
+                        } else break;
                     }
                     lastWeekId = weekId;
                 }
             }
 
-            // 3. Last Workout Summary
-            const { data: lastSession, error: lsErr } = await supabase
-                .from('workout_sessions')
-                .select(`
-                    id, date, duration_minutes,
-                    template:templates(name),
-                    session_exercises(
-                        exercise_id,
-                        exercise:exercises(name),
-                        sets(weight, reps)
-                    )
-                `)
-                .eq('user_id', user.id)
-                .eq('status', 'completed')
-                .order('date', { ascending: false })
-                .limit(1)
-                .single();
-
-            let lastWorkoutSummary = null;
-            if (lastSession) {
-                // Count PRs in last session
-                // We'll define a PR as weight > all-time former max for that exercise
-                let prCount = 0;
-                for (const se of (lastSession.session_exercises || [])) {
-                    const exId = se.exercise_id;
-                    const sessionMax = Math.max(...(se.sets || []).map((s: any) => s.weight || 0));
-
-                    if (sessionMax > 0) {
-                        const { data: formerMaxData } = await supabase
-                            .from('sets')
-                            .select('weight')
-                            .eq('session_exercise.exercise_id', exId)
-                            .lt('session_exercise.session.date', lastSession.date)
-                            .order('weight', { ascending: false })
-                            .limit(1);
-
-                        const formerMax = formerMaxData?.[0]?.weight || 0;
-                        if (sessionMax > formerMax) prCount++;
-                    }
-                }
-
-                lastWorkoutSummary = {
-                    name: (lastSession as any).template?.name || 'Custom Workout',
-                    date: lastSession.date,
-                    duration: lastSession.duration_minutes || 0,
-                    prs: prCount
-                };
-            }
-
-            // 4. Body Metrics (Current + Change)
+            // 5. Body Weight
             const { data: weightData } = await supabase
                 .from('body_metrics')
                 .select('weight')
@@ -239,28 +257,18 @@ export const useProgress = () => {
 
             const currentWeight = weightData?.[0]?.weight || null;
             const prevWeight = weightData?.[1]?.weight || null;
-            const weightChange = currentWeight && prevWeight ? currentWeight - prevWeight : 0;
 
-            // 5. Strength Trend Indicator (Top Lifts)
+            // 6. Trends
             const keyLifts = ['Bench Press', 'Squat', 'Deadlift'];
             const trends = [];
             for (const liftName of keyLifts) {
-                const { data: liftData } = await supabase
-                    .from('exercises')
-                    .select('id')
-                    .eq('name', liftName)
-                    .single();
-
+                const { data: liftData } = await supabase.from('exercises').select('id').eq('name', liftName).single();
                 if (liftData) {
                     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-                    // Current max
                     const currentMax = await getPersonalRecord(liftData.id);
-
-                    // Max from 30 days ago
                     const { data: oldMaxData } = await supabase
                         .from('sets')
-                        .select('weight, session_exercise!inner(session:workout_sessions!inner(date))')
+                        .select('weight')
                         .eq('session_exercise.exercise_id', liftData.id)
                         .lt('session_exercise.session.date', thirtyDaysAgo.toISOString())
                         .order('weight', { ascending: false })
@@ -271,13 +279,13 @@ export const useProgress = () => {
                         trends.push({
                             name: liftName,
                             currentMax,
-                            change: oldMax > 0 ? currentMax - oldMax : 0
+                            change: currentMax - oldMax
                         });
                     }
                 }
             }
 
-            // 6. Top PR This Month
+            // 7. Top PR Monthly
             const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             const { data: monthPrData } = await supabase
                 .from('sets')
@@ -296,14 +304,16 @@ export const useProgress = () => {
                 };
             }
 
-            setLoading(false);
             return {
                 weeklyWorkouts: weekSessions?.length || 0,
                 weeklyVolume,
+                prevWeekVolume,
+                prsThisWeek,
+                weeklyGoal: 4,
+                lastWorkoutSubtext,
                 streak,
-                lastWorkout: lastWorkoutSummary,
                 bodyWeight: currentWeight,
-                bodyWeightChange: weightChange,
+                bodyWeightChange: currentWeight && prevWeight ? currentWeight - prevWeight : 0,
                 trends,
                 topPrMonth
             };
