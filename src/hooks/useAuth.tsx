@@ -19,15 +19,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Restore persisted session on app launch
         supabase.auth.getSession().then(({ data: { session } }) => {
             setSession(session);
             setUser(session?.user ?? null);
             setLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
-            setUser(session?.user ?? null);
+        // Only clear session on explicit sign-out — never on token refresh failures
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_OUT') {
+                // User explicitly signed out
+                setSession(null);
+                setUser(null);
+            } else if (session) {
+                // SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION, etc.
+                setSession(session);
+                setUser(session.user);
+            }
+            // If event is not SIGNED_OUT and session is null (e.g. token refresh
+            // failed due to network), we keep the existing session alive so the
+            // user stays logged in.
             setLoading(false);
         });
 

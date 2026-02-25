@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text, Portal, Dialog, Button } from 'react-native-paper';
+import { Text, Button } from 'react-native-paper';
+import { AppModal } from '../components/AppModal';
 import { ArrowLeft, Plus, Layout, Trash2, Dumbbell, Play, MoreVertical, Clock, ListChecks } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -45,7 +46,7 @@ export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = 
         if (templateExercises.length === 0) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         const result = await startWorkout(templateId, templateExercises);
-        if (!result.error) navigation.navigate('ActiveWorkout');
+        if (!result.error) navigation.navigate('Dashboard', { screen: 'ActiveWorkout' });
     };
 
     const available = exercises.filter(e => !templateExercises.some(te => te.exercise_id === e.id));
@@ -232,56 +233,53 @@ export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = 
             )}
 
             {/* ═══ Dialogs ═══ */}
-            <Portal>
-                {/* Add exercise picker */}
-                <Dialog visible={showPicker} onDismiss={() => setShowPicker(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Add Exercise</Dialog.Title>
-                    <Dialog.Content>
-                        <FlatList
-                            data={available}
-                            keyExtractor={item => item.id}
-                            style={{ maxHeight: 350 }}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    onPress={() => handleAdd(item.id)}
-                                    style={styles.pickerItem}
-                                >
-                                    <View style={styles.pickerRow}>
-                                        <View style={styles.pickerIcon}>
-                                            <Dumbbell size={14} color={appColors.textSecondary} />
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={styles.pickerName}>{item.name}</Text>
-                                            <Text style={styles.pickerSub}>{item.muscle_group}</Text>
-                                        </View>
-                                        <Plus size={16} color={appColors.accent} />
-                                    </View>
-                                </TouchableOpacity>
-                            )}
-                            ListEmptyComponent={
-                                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                                    <Text style={{ color: appColors.textTertiary, textAlign: 'center' }}>
-                                        No exercises available.{'\n'}Create one from the Exercises tab.
-                                    </Text>
+            <AppModal
+                visible={showPicker}
+                onDismiss={() => setShowPicker(false)}
+                title="Add Exercise"
+                showClose
+            >
+                <FlatList
+                    data={available}
+                    keyExtractor={item => item.id}
+                    style={{ maxHeight: 350 }}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            onPress={() => handleAdd(item.id)}
+                            style={styles.pickerItem}
+                        >
+                            <View style={styles.pickerRow}>
+                                <View style={styles.pickerIcon}>
+                                    <Dumbbell size={14} color={appColors.textSecondary} />
                                 </View>
-                            }
-                        />
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setShowPicker(false)} textColor={appColors.textSecondary} labelStyle={{ fontFamily: appFonts.bold }}>Close</Button>
-                    </Dialog.Actions>
-                </Dialog>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.pickerName}>{item.name}</Text>
+                                    <Text style={styles.pickerSub}>{item.muscle_group}</Text>
+                                </View>
+                                <Plus size={16} color={appColors.accent} />
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                    ListEmptyComponent={
+                        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                            <Text style={{ color: appColors.textTertiary, textAlign: 'center' }}>
+                                No exercises available.{'\n'}Create one from the Exercises tab.
+                            </Text>
+                        </View>
+                    }
+                />
+            </AppModal>
 
-                {/* Delete confirmation */}
-                <Dialog visible={!!deleteId} onDismiss={() => setDeleteId(null)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Remove Exercise?</Dialog.Title>
-                    <Dialog.Content><Text style={styles.dialogText}>This exercise will be removed from the template.</Text></Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setDeleteId(null)} textColor={appColors.textSecondary} labelStyle={{ fontFamily: appFonts.bold }}>Cancel</Button>
-                        <Button onPress={confirmDelete} textColor={appColors.danger} labelStyle={{ fontFamily: appFonts.bold }}>Remove</Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
+            <AppModal
+                visible={!!deleteId}
+                onDismiss={() => setDeleteId(null)}
+                title="Remove Exercise?"
+                body="This exercise will be removed from the template."
+                actions={[
+                    { label: 'Keep', onPress: () => setDeleteId(null), variant: 'primary' },
+                    { label: 'Remove', onPress: confirmDelete, variant: 'destructive' },
+                ]}
+            />
         </AnimatedScreen>
     );
 };
@@ -454,10 +452,7 @@ const styles = StyleSheet.create({
     },
     startBtnText: { ...appTypography.h2, color: '#000', fontSize: 15, fontFamily: appFonts.black, letterSpacing: 1 },
 
-    // ═══ Dialog ═══
-    dialog: { backgroundColor: appColors.cardBg, borderRadius: 16, paddingBottom: 8 },
-    dialogTitle: { ...appTypography.h2, color: '#fff', marginTop: 8, fontSize: 20 },
-    dialogText: { ...appTypography.body, color: appColors.textSecondary, lineHeight: 22 },
+
     pickerItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: appColors.border },
     pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     pickerIcon: {

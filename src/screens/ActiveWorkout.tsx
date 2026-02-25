@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
-import { Text, Button, TextInput, Portal, Dialog, Chip, ActivityIndicator } from 'react-native-paper';
+import { Text, Button, TextInput, Chip, ActivityIndicator } from 'react-native-paper';
+import { AppModal } from '../components/AppModal';
 import { Timer, Plus, Check, Dumbbell } from 'lucide-react-native';
 import { MotiPressable } from 'moti/interactions';
 import * as Haptics from 'expo-haptics';
@@ -236,125 +237,123 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
             </View>
 
             {/* ═══ Dialogs ═══ */}
-            <Portal>
-                {/* Finish Confirm */}
-                <Dialog visible={showFinishConfirm} onDismiss={() => setShowFinishConfirm(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Finish Workout?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={styles.dialogText}>Make sure all sets are logged before finishing.</Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setShowFinishConfirm(false)} textColor="#888">Not Yet</Button>
-                        <Button onPress={handleFinish} textColor={appColors.accent}>Finish</Button>
-                    </Dialog.Actions>
-                </Dialog>
+            <AppModal
+                visible={showFinishConfirm}
+                onDismiss={() => setShowFinishConfirm(false)}
+                title="Finish Workout?"
+                body="Make sure all sets are logged before finishing."
+                actions={[
+                    { label: 'Finish', onPress: handleFinish, variant: 'primary' },
+                    { label: 'Not Yet', onPress: () => setShowFinishConfirm(false), variant: 'secondary' },
+                ]}
+            />
 
-                {/* Empty Warning */}
-                <Dialog visible={showEmptyWarning} onDismiss={() => setShowEmptyWarning(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>No Sets Completed</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={styles.dialogText}>Complete at least one set before finishing, or cancel the workout.</Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setShowEmptyWarning(false)} textColor={appColors.accent}>Got it</Button>
-                    </Dialog.Actions>
-                </Dialog>
+            <AppModal
+                visible={showEmptyWarning}
+                onDismiss={() => setShowEmptyWarning(false)}
+                title="No Sets Completed"
+                body="Complete at least one set before finishing, or cancel the workout."
+                actions={[
+                    { label: 'Got it', onPress: () => setShowEmptyWarning(false), variant: 'primary' },
+                ]}
+            />
 
-                {/* Remove Exercise */}
-                <Dialog visible={!!exerciseToRemove} onDismiss={() => setExerciseToRemove(null)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Remove Exercise?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={styles.dialogText}>This will remove the exercise and all its logged sets.</Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setExerciseToRemove(null)} textColor="#888">Keep</Button>
-                        <Button onPress={confirmRemoveExercise} textColor={appColors.danger}>Remove</Button>
-                    </Dialog.Actions>
-                </Dialog>
+            <AppModal
+                visible={!!exerciseToRemove}
+                onDismiss={() => setExerciseToRemove(null)}
+                title="Remove Exercise?"
+                body="This will remove the exercise and all its logged sets."
+                actions={[
+                    { label: 'Keep', onPress: () => setExerciseToRemove(null), variant: 'primary' },
+                    { label: 'Remove', onPress: confirmRemoveExercise, variant: 'destructive' },
+                ]}
+            />
 
-                {/* Cancel Confirm */}
-                <Dialog visible={showCancelConfirm} onDismiss={() => setShowCancelConfirm(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Cancel Workout?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={styles.dialogText}>All logged data will be lost. This cannot be undone.</Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setShowCancelConfirm(false)} textColor="#888">Resume</Button>
-                        <Button onPress={handleCancel} textColor={appColors.danger}>Discard</Button>
-                    </Dialog.Actions>
-                </Dialog>
+            <AppModal
+                visible={showCancelConfirm}
+                onDismiss={() => setShowCancelConfirm(false)}
+                title="Cancel Workout?"
+                body="All logged data will be lost. This cannot be undone."
+                actions={[
+                    { label: 'Resume Workout', onPress: () => setShowCancelConfirm(false), variant: 'primary' },
+                    { label: 'Discard', onPress: handleCancel, variant: 'destructive' },
+                ]}
+            />
 
-                {/* Exercise Picker */}
-                <Dialog visible={showExercisePicker} onDismiss={() => setShowExercisePicker(false)} style={[styles.dialog, { maxHeight: '80%' }]}>
-                    <Dialog.Title style={styles.dialogTitle}>Add Exercise</Dialog.Title>
-                    <Dialog.Content>
-                        <FlatList
-                            data={exercises}
-                            keyExtractor={item => item.id}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity onPress={() => handleAddExercise(item)} style={styles.pickerItem}>
-                                    <Text style={styles.pickerName}>{item.name}</Text>
-                                    <Text style={styles.pickerSub}>{item.muscle_group}</Text>
+            <AppModal
+                visible={showExercisePicker}
+                onDismiss={() => setShowExercisePicker(false)}
+                title="Add Exercise"
+                showClose
+            >
+                <FlatList
+                    data={exercises}
+                    keyExtractor={item => item.id}
+                    style={{ maxHeight: 400 }}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity onPress={() => handleAddExercise(item)} style={styles.pickerItem}>
+                            <Text style={styles.pickerName}>{item.name}</Text>
+                            <Text style={styles.pickerSub}>{item.muscle_group}</Text>
+                        </TouchableOpacity>
+                    )}
+                    ListFooterComponent={
+                        exercises.length > 0 ? (
+                            <View style={{ borderTopWidth: 1, borderTopColor: appColors.border, marginTop: 16 }}>
+                                <TouchableOpacity
+                                    onPress={() => { setShowExercisePicker(false); setShowCreateExercise(true); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14 }}
+                                >
+                                    <Plus size={16} color={appColors.accent} />
+                                    <Text style={{ color: appColors.accent, fontFamily: appFonts.bold, fontSize: 14 }}>Create New Exercise</Text>
                                 </TouchableOpacity>
-                            )}
-                            ListFooterComponent={
-                                exercises.length > 0 ? (
-                                    <View style={{ borderTopWidth: 1, borderTopColor: appColors.border, marginTop: 16 }}>
-                                        <TouchableOpacity
-                                            onPress={() => { setShowExercisePicker(false); setShowCreateExercise(true); }}
-                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14 }}
-                                        >
-                                            <Plus size={16} color={appColors.accent} />
-                                            <Text style={{ color: appColors.accent, fontFamily: appFonts.bold, fontSize: 14 }}>Create New Exercise</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                ) : null
-                            }
-                            ListEmptyComponent={
-                                <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                                    <Text style={{ color: '#888', marginBottom: 20, textAlign: 'center', fontSize: 13 }}>
-                                        No exercises created yet.
-                                    </Text>
-                                    <TouchableOpacity
-                                        onPress={() => { setShowExercisePicker(false); setShowCreateExercise(true); }}
-                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: appColors.accent, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 }}
-                                    >
-                                        <Plus size={16} color="#000" />
-                                        <Text style={{ color: '#000', fontFamily: appFonts.bold, fontSize: 14 }}>Create First Exercise</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            }
-                        />
-                    </Dialog.Content>
-                </Dialog>
-
-                {/* Create Exercise */}
-                <Dialog visible={showCreateExercise} onDismiss={() => setShowCreateExercise(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Create Exercise</Dialog.Title>
-                    <Dialog.Content>
-                        <TextInput label="Name" value={newExName} onChangeText={setNewExName} mode="outlined" />
-                        <View style={{ marginTop: 12 }}>
-                            <Text style={{ color: '#888', fontSize: 11, marginBottom: 8, fontFamily: appFonts.bold }}>Muscle Group</Text>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                {['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'].map(m => (
-                                    <Chip
-                                        key={m}
-                                        selected={newExMuscle === m}
-                                        onPress={() => setNewExMuscle(m)}
-                                        style={{ marginRight: 8 }}
-                                    >
-                                        {m}
-                                    </Chip>
-                                ))}
-                            </ScrollView>
+                            </View>
+                        ) : null
+                    }
+                    ListEmptyComponent={
+                        <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                            <Text style={{ color: '#888', marginBottom: 20, textAlign: 'center', fontSize: 13 }}>
+                                No exercises created yet.
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => { setShowExercisePicker(false); setShowCreateExercise(true); }}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: appColors.accent, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 }}
+                            >
+                                <Plus size={16} color="#000" />
+                                <Text style={{ color: '#000', fontFamily: appFonts.bold, fontSize: 14 }}>Create First Exercise</Text>
+                            </TouchableOpacity>
                         </View>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setShowCreateExercise(false)} textColor="#888">Cancel</Button>
-                        <Button onPress={handleCreateExercise} disabled={!newExName} textColor={appColors.accent}>Create & Add</Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
+                    }
+                />
+            </AppModal>
+
+            <AppModal
+                visible={showCreateExercise}
+                onDismiss={() => setShowCreateExercise(false)}
+                title="Create Exercise"
+                actions={[
+                    { label: 'Create & Add', onPress: handleCreateExercise, variant: 'primary', disabled: !newExName },
+                    { label: 'Cancel', onPress: () => setShowCreateExercise(false), variant: 'secondary' },
+                ]}
+            >
+                <TextInput label="Name" value={newExName} onChangeText={setNewExName} mode="outlined"
+                    outlineColor={appColors.border} activeOutlineColor={appColors.accent}
+                    textColor="#fff" style={{ backgroundColor: appColors.bg, marginBottom: 12 }}
+                    outlineStyle={{ borderRadius: 10 }}
+                />
+                <Text style={{ color: '#888', fontSize: 11, marginBottom: 8, fontFamily: appFonts.bold }}>Muscle Group</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'].map(m => (
+                        <Chip
+                            key={m}
+                            selected={newExMuscle === m}
+                            onPress={() => setNewExMuscle(m)}
+                            style={{ marginRight: 8 }}
+                        >
+                            {m}
+                        </Chip>
+                    ))}
+                </ScrollView>
+            </AppModal>
 
             <SmartSetsPrompt visible={showSmartPrompt} updates={smartUpdates}
                 onAccept={async (id, n) => { await updateDefaultSets(id, n); setSmartUpdates(p => p.filter(u => u.exerciseId !== id)); }}
@@ -472,10 +471,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
 
-    // ═══ Dialogs ═══
-    dialog: { backgroundColor: appColors.cardBg, borderRadius: 16, paddingBottom: 8 },
-    dialogTitle: { ...appTypography.h2, color: '#fff', marginTop: 8, fontSize: 20, fontFamily: appFonts.bold },
-    dialogText: { ...appTypography.body, color: '#888', lineHeight: 22, fontSize: 13 },
+
 
     // ═══ Exercise Picker ═══
     pickerItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: appColors.border },

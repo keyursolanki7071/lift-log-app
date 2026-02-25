@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, FlatList, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { Text, Portal, Dialog, TextInput, Button } from 'react-native-paper';
+import { Text, TextInput, Button } from 'react-native-paper';
+import { AppModal } from '../components/AppModal';
 import { ClipboardList, Plus, ChevronRight, MoreVertical, Trash2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { MotiView } from 'moti';
@@ -184,34 +185,32 @@ export const TemplateListScreen: React.FC<{ navigation: any }> = ({ navigation }
             )}
 
             {/* ═══ Dialogs ═══ */}
-            <Portal>
-                <Dialog visible={showCreate} onDismiss={() => setShowCreate(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>New Workout</Dialog.Title>
-                    <Dialog.Content>
-                        <TextInput label="Workout name" value={newName} onChangeText={setNewName} mode="outlined" autoFocus
-                            outlineColor={appColors.border} activeOutlineColor={appColors.accent}
-                            style={{ backgroundColor: appColors.bg }} textColor="#fff" />
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setShowCreate(false)} textColor={appColors.textSecondary} labelStyle={{ fontFamily: appFonts.bold }}>Cancel</Button>
-                        <Button onPress={handleCreate} disabled={!newName.trim()} mode="contained" buttonColor={appColors.accent} textColor="#000" labelStyle={{ fontFamily: appFonts.black }} style={{ borderRadius: 8 }}>Create</Button>
-                    </Dialog.Actions>
-                </Dialog>
-                <Dialog visible={!!deleteId} onDismiss={() => setDeleteId(null)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Delete Template?</Dialog.Title>
-                    <Dialog.Content><Text style={styles.dialogText}>This action cannot be undone. All exercise configurations for this template will be removed.</Text></Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setDeleteId(null)} textColor={appColors.textSecondary} labelStyle={{ fontFamily: appFonts.bold }}>Cancel</Button>
-                        <Button onPress={async () => {
-                            if (deleteId) {
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                await deleteTemplate(deleteId);
-                                setDeleteId(null);
-                            }
-                        }} textColor={appColors.danger} labelStyle={{ fontFamily: appFonts.bold }}>Delete</Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
+            <AppModal
+                visible={showCreate}
+                onDismiss={() => setShowCreate(false)}
+                title="New Workout"
+                actions={[
+                    { label: 'Create', onPress: handleCreate, variant: 'primary', disabled: !newName.trim() },
+                    { label: 'Cancel', onPress: () => setShowCreate(false), variant: 'secondary' },
+                ]}
+            >
+                <TextInput label="Workout name" value={newName} onChangeText={setNewName} mode="outlined" autoFocus
+                    outlineColor={appColors.border} activeOutlineColor={appColors.accent}
+                    style={{ backgroundColor: appColors.bg }} textColor="#fff"
+                    outlineStyle={{ borderRadius: 10 }}
+                />
+            </AppModal>
+
+            <AppModal
+                visible={!!deleteId}
+                onDismiss={() => setDeleteId(null)}
+                title="Delete Template?"
+                body="This action cannot be undone. All exercise configurations for this template will be removed."
+                actions={[
+                    { label: 'Cancel', onPress: () => setDeleteId(null), variant: 'secondary' },
+                    { label: 'Delete', onPress: async () => { if (deleteId) { await deleteTemplate(deleteId); setDeleteId(null); } }, variant: 'destructive' },
+                ]}
+            />
         </AnimatedScreen>
     );
 };
@@ -365,8 +364,4 @@ const styles = StyleSheet.create({
     },
     bottomBtnText: { ...appTypography.h2, color: '#000', fontSize: 14, fontFamily: appFonts.black, letterSpacing: 1 },
 
-    // ═══ Dialog ═══
-    dialog: { backgroundColor: appColors.cardBg, borderRadius: 16, paddingBottom: 8 },
-    dialogTitle: { ...appTypography.h2, color: '#fff', marginTop: 8, fontSize: 20 },
-    dialogText: { ...appTypography.body, color: appColors.textSecondary, lineHeight: 22 },
 });

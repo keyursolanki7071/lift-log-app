@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, FlatList, StyleSheet, ScrollView, TextInput } from 'react-native';
-import { Text, Portal, Dialog, Button } from 'react-native-paper';
+import { Text, Button } from 'react-native-paper';
+import { AppModal } from '../components/AppModal';
 import { Search, Plus, Dumbbell } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { MotiView } from 'moti';
@@ -189,24 +190,16 @@ export const ExercisesScreen: React.FC = () => {
                 initialDefaultSets={editingExercise?.default_sets}
             />
 
-            <Portal>
-                <Dialog visible={!!deleteId} onDismiss={() => setDeleteId(null)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Delete Exercise?</Dialog.Title>
-                    <Dialog.Content>
-                        <Text style={styles.dialogText}>This will permanently remove this exercise from your library.</Text>
-                    </Dialog.Content>
-                    <Dialog.Actions>
-                        <Button onPress={() => setDeleteId(null)} textColor={appColors.textSecondary} labelStyle={{ fontFamily: appFonts.bold }}>Cancel</Button>
-                        <Button onPress={async () => {
-                            if (deleteId) {
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                                await deleteExercise(deleteId);
-                                setDeleteId(null);
-                            }
-                        }} textColor={appColors.danger} labelStyle={{ fontFamily: appFonts.bold }}>Delete</Button>
-                    </Dialog.Actions>
-                </Dialog>
-            </Portal>
+            <AppModal
+                visible={!!deleteId}
+                onDismiss={() => setDeleteId(null)}
+                title="Delete Exercise?"
+                body="This will permanently remove this exercise from your library."
+                actions={[
+                    { label: 'Cancel', onPress: () => setDeleteId(null), variant: 'secondary' },
+                    { label: 'Delete', onPress: async () => { if (deleteId) { await deleteExercise(deleteId); setDeleteId(null); } }, variant: 'destructive' },
+                ]}
+            />
         </AnimatedScreen>
     );
 };
@@ -323,8 +316,4 @@ const styles = StyleSheet.create({
     },
     bottomBtnText: { ...appTypography.h2, color: '#000', fontSize: 14, fontFamily: appFonts.black, letterSpacing: 1 },
 
-    // ═══ Dialog ═══
-    dialog: { backgroundColor: appColors.cardBg, borderRadius: 16, paddingBottom: 8 },
-    dialogTitle: { ...appTypography.h2, color: '#fff', marginTop: 8, fontSize: 20 },
-    dialogText: { ...appTypography.body, color: appColors.textSecondary, lineHeight: 22 },
 });

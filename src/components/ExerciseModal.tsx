@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
-import {
-    Portal, Modal, TextInput, Button, Text,
-} from 'react-native-paper';
-import { appColors, appTypography } from '../theme';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { TextInput, Button, Text } from 'react-native-paper';
+import { AppModal } from './AppModal';
+import { appColors, appFonts, appTypography } from '../theme';
 
 interface Props {
     visible: boolean;
@@ -39,9 +38,6 @@ export const ExerciseModal: React.FC<Props> = ({
 
         const setsNum = parseInt(defaultSets);
         if (isNaN(setsNum) || setsNum < 1 || setsNum > 20) {
-            // We could show an alert here, but for now we'll just fall back to 3 
-            // but the UI should ideally prevent 0. 
-            // Let's at least ensure it's a positive integer for the actual save.
             onSave(trimmedName, muscleGroup, Math.max(1, Math.min(20, setsNum || 3)));
         } else {
             onSave(trimmedName, muscleGroup, setsNum);
@@ -49,32 +45,30 @@ export const ExerciseModal: React.FC<Props> = ({
     };
 
     return (
-        <Portal>
-            <Modal
-                visible={visible}
-                onDismiss={onClose}
-                contentContainerStyle={[styles.modal, { backgroundColor: appColors.cardBg }]}
-            >
-                <Text style={styles.modalTitle}>
-                    {title}
-                </Text>
+        <AppModal
+            visible={visible}
+            onDismiss={onClose}
+            title={title}
+            actions={[
+                { label: 'Save', onPress: handleSave, variant: 'primary', disabled: !name.trim() },
+                { label: 'Cancel', onPress: onClose, variant: 'secondary' },
+            ]}
+        >
+            <TextInput
+                label="Exercise name"
+                value={name}
+                onChangeText={setName}
+                mode="outlined"
+                style={styles.input}
+                outlineStyle={styles.outline}
+                outlineColor={appColors.border}
+                activeOutlineColor={appColors.accent}
+                textColor="#fff"
+                autoFocus
+            />
 
-                <TextInput
-                    label="Exercise name"
-                    value={name}
-                    onChangeText={setName}
-                    mode="outlined"
-                    style={styles.input}
-                    outlineStyle={styles.outline}
-                    outlineColor={appColors.border}
-                    activeOutlineColor={appColors.accent}
-                    textColor="#fff"
-                    autoFocus
-                />
-
-                <Text style={styles.label}>
-                    Muscle Group
-                </Text>
+            <Text style={styles.label}>Muscle Group</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                 <View style={styles.chipGrid}>
                     {muscleGroups.map(mg => (
                         <Button
@@ -88,7 +82,7 @@ export const ExerciseModal: React.FC<Props> = ({
                             ]}
                             labelStyle={{
                                 fontSize: 11,
-                                fontFamily: muscleGroup === mg ? 'Inter-Bold' : 'Inter-Regular',
+                                fontFamily: muscleGroup === mg ? appFonts.bold : appFonts.regular,
                                 color: muscleGroup === mg ? '#000' : appColors.textSecondary
                             }}
                         >
@@ -96,54 +90,26 @@ export const ExerciseModal: React.FC<Props> = ({
                         </Button>
                     ))}
                 </View>
+            </ScrollView>
 
-                <TextInput
-                    label="Default sets"
-                    value={defaultSets}
-                    onChangeText={setDefaultSets}
-                    mode="outlined"
-                    keyboardType="numeric"
-                    style={styles.input}
-                    outlineStyle={styles.outline}
-                    outlineColor={appColors.border}
-                    activeOutlineColor={appColors.accent}
-                    textColor="#fff"
-                    left={<TextInput.Icon icon="counter" color={appColors.textTertiary} />}
-                />
-
-                <View style={styles.actions}>
-                    <Button mode="text" onPress={onClose} textColor={appColors.textSecondary} labelStyle={{ fontFamily: 'Inter-Bold' }}>Cancel</Button>
-                    <Button
-                        mode="contained"
-                        onPress={handleSave}
-                        disabled={!name.trim()}
-                        buttonColor={appColors.accent}
-                        textColor="#000"
-                        labelStyle={{ fontFamily: 'Inter-Black' }}
-                        style={{ borderRadius: 8 }}
-                    >
-                        Save
-                    </Button>
-                </View>
-            </Modal>
-        </Portal>
+            <TextInput
+                label="Default sets"
+                value={defaultSets}
+                onChangeText={setDefaultSets}
+                mode="outlined"
+                keyboardType="numeric"
+                style={styles.input}
+                outlineStyle={styles.outline}
+                outlineColor={appColors.border}
+                activeOutlineColor={appColors.accent}
+                textColor="#fff"
+                left={<TextInput.Icon icon="counter" color={appColors.textTertiary} />}
+            />
+        </AppModal>
     );
 };
 
 const styles = StyleSheet.create({
-    modal: {
-        margin: 20,
-        padding: 24,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: appColors.border,
-    },
-    modalTitle: {
-        ...appTypography.h2,
-        color: '#fff',
-        fontSize: 22,
-        marginBottom: 20,
-    },
     label: {
         ...appTypography.small,
         color: appColors.textTertiary,
@@ -153,7 +119,7 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     input: {
-        marginBottom: 20,
+        marginBottom: 16,
         backgroundColor: appColors.bg,
     },
     outline: {
@@ -161,18 +127,10 @@ const styles = StyleSheet.create({
     },
     chipGrid: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
         gap: 8,
-        marginBottom: 20,
     },
     chipBtn: {
         borderRadius: 8,
         minWidth: 80,
-    },
-    actions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-        marginTop: 10,
     },
 });

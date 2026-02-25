@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Button, Portal, Dialog } from 'react-native-paper';
+import { Text } from 'react-native-paper';
+import { AppModal } from './AppModal';
 import { appColors, appFonts, appTypography } from '../theme';
 
 interface SmartUpdate {
@@ -26,40 +26,21 @@ export const SmartSetsPrompt: React.FC<Props> = ({
     const current = updates[0];
 
     return (
-        <Portal>
-            <Dialog visible={visible} onDismiss={onClose} style={styles.dialog}>
-                <Dialog.Title style={styles.dialogTitle}>🧠 Smart Update</Dialog.Title>
-                <Dialog.Content>
-                    <Text style={styles.label}>
-                        Update default sets for <Text style={styles.accentText}>{current.exerciseName}</Text>?
-                    </Text>
-                    <Text style={styles.description}>
-                        You performed <Text style={styles.accentTextSecondary}>{current.actual} sets</Text> (previous default: {current.default}).
-                    </Text>
-                </Dialog.Content>
-                <Dialog.Actions>
-                    <Button onPress={() => onSkip(current.exerciseId)} textColor={appColors.textSecondary} labelStyle={{ fontFamily: appFonts.bold }}>Skip</Button>
-                    <Button
-                        mode="contained"
-                        onPress={() => onAccept(current.exerciseId, current.actual)}
-                        buttonColor={appColors.accent}
-                        textColor="#000"
-                        labelStyle={{ fontFamily: appFonts.black }}
-                        style={{ borderRadius: 8 }}
-                    >
-                        Update to {current.actual}
-                    </Button>
-                </Dialog.Actions>
-            </Dialog>
-        </Portal>
+        <AppModal
+            visible={visible}
+            onDismiss={onClose}
+            title="🧠 Smart Update"
+            actions={[
+                { label: `Update to ${current.actual}`, onPress: () => onAccept(current.exerciseId, current.actual), variant: 'primary' as const },
+                { label: 'Skip', onPress: () => onSkip(current.exerciseId), variant: 'secondary' as const },
+            ]}
+        >
+            <Text style={{ color: '#fff', fontSize: 15, fontFamily: appFonts.regular, lineHeight: 22, marginBottom: 4 }}>
+                Update default sets for <Text style={{ color: appColors.accent, fontFamily: appFonts.bold }}>{current.exerciseName}</Text>?
+            </Text>
+            <Text style={{ color: appColors.textSecondary, fontSize: 13, fontFamily: appFonts.regular, lineHeight: 20 }}>
+                You performed <Text style={{ color: appColors.accentAlt, fontFamily: appFonts.bold }}>{current.actual} sets</Text> (previous default: {current.default}).
+            </Text>
+        </AppModal>
     );
 };
-
-const styles = StyleSheet.create({
-    dialog: { backgroundColor: appColors.cardBg, borderRadius: 12, paddingBottom: 8 },
-    dialogTitle: { ...appTypography.h2, color: '#fff', fontSize: 22, marginTop: 8 },
-    label: { ...appTypography.body, color: '#fff', fontSize: 16, marginBottom: 10, lineHeight: 22 },
-    description: { ...appTypography.body, color: appColors.textSecondary, fontSize: 14, lineHeight: 20 },
-    accentText: { color: appColors.accent, fontFamily: appFonts.bold },
-    accentTextSecondary: { color: appColors.accentAlt, fontFamily: appFonts.bold },
-});
