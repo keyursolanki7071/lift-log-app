@@ -18,7 +18,9 @@ export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         if (!email || !password) { setError('Please fill in all fields'); return; }
         setLoading(true); setError('');
         const { error: err } = await signIn(email, password);
-        if (err) setError(err);
+        if (err) {
+            setError(err.message || 'Failed to sign in. Please check your credentials.');
+        }
         setLoading(false);
     };
 

@@ -29,11 +29,11 @@ export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         const { error: err } = await signUp(email, password);
 
         if (err) {
-            // Handle specific Supabase errors if needed, otherwise show the message
-            if (err.includes('already registered')) {
+            const msg = err.message || '';
+            if (msg.toLowerCase().includes('already registered')) {
                 setError('This email is already associated with an account.');
             } else {
-                setError(err);
+                setError(msg || 'Failed to sign up. Please try again.');
             }
             setLoading(false);
             return;
