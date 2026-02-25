@@ -62,14 +62,31 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
         setCompletedSets(prev => { const n = new Set(prev); n.delete(setId); return n; });
     };
 
+    const [exerciseToRemove, setExerciseToRemove] = useState<string | null>(null);
+    const [showEmptyWarning, setShowEmptyWarning] = useState(false);
+
     const handleFinish = async () => {
         setShowFinishConfirm(false);
+
+        const hasCompletedSet = completedSets.size > 0;
+        if (!hasCompletedSet) {
+            setShowEmptyWarning(true);
+            return;
+        }
+
         const mins = Math.round((Date.now() - startTime.getTime()) / 60000);
         const result = await finishWorkout(mins);
         if (result.smartUpdates && result.smartUpdates.length > 0) {
             setSmartUpdates(result.smartUpdates);
             setShowSmartPrompt(true);
         } else { navigation.popToTop(); clearWorkout(); }
+    };
+
+    const confirmRemoveExercise = async () => {
+        if (exerciseToRemove) {
+            await removeExerciseFromSession(exerciseToRemove);
+            setExerciseToRemove(null);
+        }
     };
 
     const handleCancel = async () => {
@@ -145,7 +162,7 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
                                         <Text style={styles.exerciseName} numberOfLines={1}>{ex.exerciseName}</Text>
                                     </View>
                                     <TouchableOpacity
-                                        onPress={() => removeExerciseFromSession(ex.id)}
+                                        onPress={() => setExerciseToRemove(ex.id)}
                                         style={{ padding: 4 }}
                                     >
                                         <X size={20} color={appColors.textTertiary} />
@@ -251,6 +268,23 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
                     <Dialog.Actions>
                         <Button onPress={() => setShowFinishConfirm(false)} textColor={appColors.textSecondary}>Close</Button>
                         <Button onPress={handleFinish} textColor={appColors.accent}>Finish</Button>
+                    </Dialog.Actions>
+                </Dialog>
+
+                <Dialog visible={showEmptyWarning} onDismiss={() => setShowEmptyWarning(false)} style={styles.dialog}>
+                    <Dialog.Title style={styles.dialogTitle}>Empty Workout</Dialog.Title>
+                    <Dialog.Content><Text style={styles.dialogText}>You haven't completed any sets yet. Please log at least one set before finishing, or cancel the workout instead.</Text></Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setShowEmptyWarning(false)} textColor={appColors.accent}>Got it</Button>
+                    </Dialog.Actions>
+                </Dialog>
+
+                <Dialog visible={!!exerciseToRemove} onDismiss={() => setExerciseToRemove(null)} style={styles.dialog}>
+                    <Dialog.Title style={styles.dialogTitle}>Remove Exercise?</Dialog.Title>
+                    <Dialog.Content><Text style={styles.dialogText}>This will remove the exercise and all its logged sets from this session.</Text></Dialog.Content>
+                    <Dialog.Actions>
+                        <Button onPress={() => setExerciseToRemove(null)} textColor={appColors.textSecondary}>Cancel</Button>
+                        <Button onPress={confirmRemoveExercise} textColor={appColors.danger}>Remove</Button>
                     </Dialog.Actions>
                 </Dialog>
 

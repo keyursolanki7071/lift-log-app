@@ -14,6 +14,7 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '../hooks/useAuth';
 import { appColors, appTypography, appFonts } from '../theme';
+import { BrandLogo } from './BrandLogo';
 
 const DRAWER_W = 280;
 
@@ -102,7 +103,7 @@ export const SideDrawer: React.FC<Props> = ({ visible, onClose, navigation }) =>
                             {/* 1. Brand Logo */}
                             <View style={styles.brandContainer}>
                                 <View style={styles.brandRow}>
-                                    <Dumbbell size={28} color={appColors.accent} strokeWidth={3} />
+                                    <BrandLogo size={28} />
                                     <Text style={styles.appTitle}>LiftLog</Text>
                                 </View>
                                 <View style={styles.brandUnderline} />

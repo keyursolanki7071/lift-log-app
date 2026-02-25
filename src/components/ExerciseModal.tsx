@@ -34,8 +34,18 @@ export const ExerciseModal: React.FC<Props> = ({
     }, [visible]);
 
     const handleSave = () => {
-        if (!name.trim()) return;
-        onSave(name.trim(), muscleGroup, parseInt(defaultSets) || 3);
+        const trimmedName = name.trim();
+        if (!trimmedName) return;
+
+        const setsNum = parseInt(defaultSets);
+        if (isNaN(setsNum) || setsNum < 1 || setsNum > 20) {
+            // We could show an alert here, but for now we'll just fall back to 3 
+            // but the UI should ideally prevent 0. 
+            // Let's at least ensure it's a positive integer for the actual save.
+            onSave(trimmedName, muscleGroup, Math.max(1, Math.min(20, setsNum || 3)));
+        } else {
+            onSave(trimmedName, muscleGroup, setsNum);
+        }
     };
 
     return (

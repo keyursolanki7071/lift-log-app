@@ -15,9 +15,14 @@ export const BodyTrackingScreen: React.FC = () => {
     const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
-        if (!weight) return;
+        const wVal = parseFloat(weight);
+        if (isNaN(wVal) || wVal <= 0 || wVal > 500) return;
+
+        const waistVal = waist ? parseFloat(waist) : null;
+        if (waistVal !== null && (isNaN(waistVal) || waistVal <= 0 || waistVal > 300)) return;
+
         setSaving(true);
-        await logMetric(parseFloat(weight), waist ? parseFloat(waist) : null, null);
+        await logMetric(wVal, waistVal, null);
         setWeight(''); setWaist(''); setSaving(false);
     };
 

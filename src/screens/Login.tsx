@@ -3,6 +3,7 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, TextInput, Button, useTheme } from 'react-native-paper';
 import { useAuth } from '../hooks/useAuth';
 import { appColors, appTypography } from '../theme';
+import { BrandLogo } from '../components/BrandLogo';
 
 export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const theme = useTheme();
@@ -25,7 +26,7 @@ export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         <View style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.inner}>
                 <View style={styles.logoSection}>
-                    <Text style={styles.logoIcon}>🏋️</Text>
+                    <BrandLogo size={60} containerStyle={{ marginBottom: 20 }} />
                     <Text style={styles.appName}>LIFT LOG</Text>
                     <Text style={styles.tagline}>Track. Lift. Grow.</Text>
                 </View>

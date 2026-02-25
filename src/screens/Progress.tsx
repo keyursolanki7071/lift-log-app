@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, SectionList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Dumbbell, ChevronRight } from 'lucide-react-native';
 import { useExercises } from '../hooks/useExercises';
@@ -35,6 +35,24 @@ export const ProgressScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
         }
     }, [exercises, fetchAllPRs]);
 
+    const sections = useMemo(() => {
+        if (!exercises || exercises.length === 0) return [];
+
+        const grouped = exercises.reduce((acc: Record<string, any[]>, ex) => {
+            const group = ex.muscle_group || 'Other';
+            if (!acc[group]) acc[group] = [];
+            acc[group].push(ex);
+            return acc;
+        }, {});
+
+        return Object.keys(grouped)
+            .sort()
+            .map(group => ({
+                title: group,
+                data: grouped[group].sort((a, b) => a.name.localeCompare(b.name))
+            }));
+    }, [exercises]);
+
     const isLoading = loadingEx || (exercises.length > 0 && loadingPR);
 
     return (
@@ -49,15 +67,23 @@ export const ProgressScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                     <ActivityIndicator size="large" color={appColors.accent} />
                 </View>
             ) : (
-                <FlatList
-                    data={exercises}
+                <SectionList
+                    sections={sections}
                     keyExtractor={item => item.id}
                     contentContainerStyle={styles.list}
                     showsVerticalScrollIndicator={false}
-                    renderItem={({ item, index }) => {
+                    stickySectionHeadersEnabled={false}
+                    renderSectionHeader={({ section: { title } }) => (
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
+                        </View>
+                    )}
+                    renderItem={({ item, index, section }) => {
                         const prWeight = prs[item.id] || 0;
+                        const absoluteIndex = sections.slice(0, sections.indexOf(section)).reduce((sum, s) => sum + s.data.length, 0) + index;
+
                         return (
-                            <AnimatedListItem index={index}>
+                            <AnimatedListItem index={absoluteIndex}>
                                 <TouchableOpacity
                                     activeOpacity={0.7}
                                     onPress={() => navigation.navigate('ExerciseDetail', { exerciseId: item.id, exerciseName: item.name })}
@@ -68,14 +94,10 @@ export const ProgressScreen: React.FC<{ navigation: any }> = ({ navigation }) =>
                                         <Dumbbell size={20} color={appColors.accent} />
                                     </View>
 
-                                    {/* Middle: Name & Muscle */}
+                                    {/* Middle: Name & Muscle Tag */}
                                     <View style={styles.middleSection}>
                                         <Text style={styles.exName} numberOfLines={1}>{item.name}</Text>
-                                        <View style={styles.badgeRow}>
-                                            <View style={styles.muscleBadge}>
-                                                <Text style={styles.muscleText}>{item.muscle_group.toUpperCase()}</Text>
-                                            </View>
-                                        </View>
+                                        <Text style={styles.muscleTag}>Muscle: {item.muscle_group}</Text>
                                     </View>
 
                                     {/* Right: PR Info */}
@@ -103,6 +125,18 @@ const styles = StyleSheet.create({
     sub: { ...appTypography.small, color: appColors.textSecondary, marginTop: 4 },
     list: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 100 },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    sectionHeader: {
+        marginTop: 24,
+        marginBottom: 12,
+        paddingHorizontal: 4,
+    },
+    sectionTitle: {
+        ...appTypography.small,
+        color: appColors.textTertiary,
+        fontFamily: appFonts.black,
+        letterSpacing: 2,
+        fontSize: 12,
+    },
     card: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -136,22 +170,12 @@ const styles = StyleSheet.create({
         fontFamily: appFonts.bold,
         letterSpacing: 0.3
     },
-    badgeRow: { flexDirection: 'row', marginTop: 8 },
-    muscleBadge: {
-        backgroundColor: appColors.accent + '12',
-        paddingHorizontal: 10,
-        paddingVertical: 3,
-        borderRadius: 5,
-        borderWidth: 1,
-        borderColor: appColors.accent + '15'
-    },
-    muscleText: {
+    muscleTag: {
         ...appTypography.small,
-        color: appColors.accent,
-        fontSize: 10,
-        fontFamily: appFonts.black,
-        letterSpacing: 0.8,
-        textTransform: 'uppercase'
+        color: appColors.textTertiary,
+        fontSize: 11,
+        marginTop: 4,
+        fontFamily: appFonts.semiBold,
     },
     rightSection: {
         flexDirection: 'row',

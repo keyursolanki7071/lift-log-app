@@ -29,9 +29,22 @@ export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = 
     };
 
     const handleDelete = async (id: string) => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await removeExerciseFromTemplate(id);
-        loadExercises();
+        Alert.alert(
+            "Remove Exercise?",
+            "Are you sure you want to remove this exercise from the template?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Remove",
+                    style: "destructive",
+                    onPress: async () => {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        await removeExerciseFromTemplate(id);
+                        loadExercises();
+                    }
+                }
+            ]
+        );
     };
 
     const handleStart = async () => {

@@ -3,6 +3,7 @@ import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, TextInput, Button } from 'react-native-paper';
 import { useAuth } from '../hooks/useAuth';
 import { appColors, appTypography } from '../theme';
+import { BrandLogo } from '../components/BrandLogo';
 
 export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const { signUp } = useAuth();
@@ -14,13 +15,29 @@ export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
 
+    const validateEmail = (email: string) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
     const handleSignup = async () => {
         if (!email || !password || !confirm) { setError('Please fill in all fields'); return; }
+        if (!validateEmail(email)) { setError('Please enter a valid email address'); return; }
         if (password !== confirm) { setError('Passwords do not match'); return; }
         if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+
         setLoading(true); setError('');
         const { error: err } = await signUp(email, password);
-        if (err) { setError(err); setLoading(false); return; }
+
+        if (err) {
+            // Handle specific Supabase errors if needed, otherwise show the message
+            if (err.includes('already registered')) {
+                setError('This email is already associated with an account.');
+            } else {
+                setError(err);
+            }
+            setLoading(false);
+            return;
+        }
         setLoading(false); setSuccess(true);
     };
 
@@ -41,6 +58,7 @@ export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         <View style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.inner}>
                 <View style={styles.headerSection}>
+                    <BrandLogo size={52} containerStyle={{ marginBottom: 24 }} />
                     <Text style={styles.heading}>Create Account</Text>
                     <Text style={styles.sub}>Start tracking your lifts</Text>
                 </View>
