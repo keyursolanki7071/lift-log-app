@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Text, useTheme } from 'react-native-paper';
+import { Text, StyleSheet, View } from 'react-native';
+import { MotiView } from 'moti';
+import { appColors, appFonts } from '../theme';
 
 interface Props {
     startTime: Date;
+    isRestActive?: boolean;
 }
 
-export const WorkoutTimer: React.FC<Props> = ({ startTime }) => {
-    const theme = useTheme();
+export const WorkoutTimer: React.FC<Props> = ({ startTime, isRestActive = false }) => {
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
@@ -25,8 +27,46 @@ export const WorkoutTimer: React.FC<Props> = ({ startTime }) => {
         : `${mins}:${secs.toString().padStart(2, '0')}`;
 
     return (
-        <Text variant="headlineSmall" style={{ color: theme.colors.primary, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-            ⏱ {formatted}
-        </Text>
+        <View style={styles.wrap}>
+            {/* Subtle pulse ring when rest is active */}
+            {isRestActive && (
+                <MotiView
+                    from={{ opacity: 0.4, scale: 0.9 }}
+                    animate={{ opacity: 0, scale: 1.4 }}
+                    transition={{
+                        type: 'timing',
+                        duration: 1500,
+                        loop: true,
+                    }}
+                    style={styles.pulse}
+                />
+            )}
+            <Text style={[styles.timer, isRestActive && styles.timerRest]}>{formatted}</Text>
+        </View>
     );
 };
+
+const styles = StyleSheet.create({
+    wrap: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    pulse: {
+        position: 'absolute',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        borderWidth: 2,
+        borderColor: appColors.accent,
+    },
+    timer: {
+        color: '#fff',
+        fontSize: 26,
+        fontFamily: appFonts.black,
+        fontVariant: ['tabular-nums'],
+        letterSpacing: 1,
+    },
+    timerRest: {
+        color: appColors.accent,
+    },
+});

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import {
     Home,
     ClipboardList,
-    BarChart2,
+    Dumbbell,
     Menu,
     Play
 } from 'lucide-react-native';
@@ -18,6 +19,7 @@ import { SelectTemplateScreen } from '../screens/SelectTemplate';
 import { ActiveWorkoutScreen } from '../screens/ActiveWorkout';
 import { ProgressScreen } from '../screens/Progress';
 import { ExerciseDetailScreen } from '../screens/ExerciseDetail';
+import { WorkoutSummaryScreen } from '../screens/WorkoutSummary';
 import { BodyTrackingScreen } from '../screens/BodyTracking';
 import { WorkoutHistoryScreen } from '../screens/WorkoutHistory';
 import { SideDrawer } from '../components/SideDrawer';
@@ -38,6 +40,8 @@ const DashboardStackScreen = () => (
         <DashStack.Screen name="DashboardHome" component={DashboardScreen} />
         <DashStack.Screen name="SelectTemplate" component={SelectTemplateScreen} />
         <DashStack.Screen name="ActiveWorkout" component={ActiveWorkoutScreen} />
+        <DashStack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
+        <DashStack.Screen name="WorkoutSummary" component={WorkoutSummaryScreen} />
     </DashStack.Navigator>
 );
 
@@ -79,6 +83,13 @@ const DummyStart = () => <View style={{ flex: 1, backgroundColor: appColors.bg }
 /* ─── Custom Tab Bar ─── */
 const CustomTabBar = ({ state, descriptors, navigation }: any) => {
     const [drawerVisible, setDrawerVisible] = useState(false);
+
+    // Hide tab bar on ActiveWorkout / WorkoutSummary
+    const focusedRoute = state.routes[state.index];
+    const focusedOptions = descriptors[focusedRoute.key].options;
+    if (focusedOptions?.tabBarStyle?.display === 'none') {
+        return null;
+    }
 
     return (
         <>
@@ -126,7 +137,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
                     const tabMeta: Record<string, { icon: any; label: string }> = {
                         Dashboard: { icon: Home, label: 'Home' },
                         Templates: { icon: ClipboardList, label: 'Workouts' },
-                        Progress: { icon: BarChart2, label: 'Progress' },
+                        Exercises: { icon: Dumbbell, label: 'Exercises' },
                     };
                     const meta = tabMeta[route.name];
                     if (!meta) return null;
@@ -162,16 +173,24 @@ export const MainTabs: React.FC = () => (
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{ headerShown: false }}
     >
-        <Tab.Screen name="Dashboard" component={DashboardStackScreen} />
+        <Tab.Screen name="Dashboard" component={DashboardStackScreen}
+            options={({ route }) => {
+                const routeName = getFocusedRouteNameFromRoute(route) ?? 'DashboardHome';
+                const hideOnScreens = ['ActiveWorkout', 'WorkoutSummary'];
+                return {
+                    tabBarStyle: { display: hideOnScreens.includes(routeName) ? 'none' : 'flex' },
+                };
+            }}
+        />
         <Tab.Screen name="Templates" component={TemplateStackScreen} options={{ title: 'Workouts' }} />
         <Tab.Screen name="Start" component={DummyStart} />
-        <Tab.Screen name="Progress" component={ProgressStackScreen} />
+        <Tab.Screen name="Exercises" component={ExercisesScreen} />
         <Tab.Screen name="Menu" component={DummyStart} />
 
         {/* Hidden tabs — navigated from sidebar only */}
         <Tab.Screen name="History" component={HistoryStackScreen}
             options={{ tabBarButton: () => null }} />
-        <Tab.Screen name="Exercises" component={ExercisesScreen}
+        <Tab.Screen name="Progress" component={ProgressStackScreen}
             options={{ tabBarButton: () => null }} />
         <Tab.Screen name="Body" component={BodyTrackingScreen}
             options={{ tabBarButton: () => null }} />

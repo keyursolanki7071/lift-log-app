@@ -1,20 +1,23 @@
 import React, { useState, useRef } from 'react';
 import { View, ScrollView, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
-import { Text, Card, Button, TextInput, Portal, Dialog, Divider, ActivityIndicator, Chip, List } from 'react-native-paper';
-import { Timer, Plus, CheckCircle, X, Check, Dumbbell } from 'lucide-react-native';
+import { Text, Button, TextInput, Portal, Dialog, Chip, ActivityIndicator } from 'react-native-paper';
+import { Timer, Plus, Check, Dumbbell } from 'lucide-react-native';
+import { MotiPressable } from 'moti/interactions';
+import * as Haptics from 'expo-haptics';
 import { useWorkout } from '../hooks/useWorkout';
 import { useExercises } from '../hooks/useExercises';
 import { RestTimer } from '../components/RestTimer';
 import { WorkoutTimer } from '../components/WorkoutTimer';
 import { SmartSetsPrompt } from '../components/SmartSetsPrompt';
 import { appColors, appFonts, appTypography } from '../theme';
+import { ActiveExerciseCard } from '../components/ActiveExerciseCard';
 import { AnimatedScreen } from '../components/AnimatedScreen';
 import { AnimatedListItem } from '../components/AnimatedListItem';
-import { MotiView, AnimatePresence } from 'moti';
+import { triggerHaptic } from '../utils';
 
 export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const {
-        session, activeExercises, isFinishing, loading: sessionLoading, updateSet, addSet, deleteSet,
+        session, activeExercises, templateName, isFinishing, loading: sessionLoading, updateSet, addSet, deleteSet,
         finishWorkout, cancelWorkout, addExerciseToSession, removeExerciseFromSession, clearWorkout, updateDefaultSets,
     } = useWorkout();
 
@@ -32,54 +35,80 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
     const [localSets, setLocalSets] = useState<Record<string, { weight: string; reps: string }>>({});
     const { exercises, createExercise } = useExercises();
     const startTime = useRef(new Date()).current;
+    const pendingSummaryRef = useRef<any>(null);
 
-    const getVal = (setId: string, field: 'weight' | 'reps', dbVal: number | null) => {
-        if (localSets[setId]?.[field] !== undefined) return localSets[setId][field];
-        return dbVal !== null ? String(dbVal) : '';
-    };
+    const [exerciseToRemove, setExerciseToRemove] = useState<string | null>(null);
+    const [showEmptyWarning, setShowEmptyWarning] = useState(false);
 
-    const handleChange = (setId: string, field: 'weight' | 'reps', value: string) => {
+    const handleSetChange = React.useCallback((setId: string, field: 'weight' | 'reps', value: string) => {
         setLocalSets(prev => ({ ...prev, [setId]: { ...prev[setId], [field]: value } }));
         const numVal = value === '' ? null : parseFloat(value);
         const cur = localSets[setId] || {};
         const w = field === 'weight' ? numVal : (cur.weight ? parseFloat(cur.weight) : null);
         const r = field === 'reps' ? numVal : (cur.reps ? parseFloat(cur.reps) : null);
         updateSet(setId, w, r);
-    };
+    }, [localSets, updateSet]);
 
-    const handleComplete = (setId: string) => {
+    const handleSetComplete = React.useCallback((setId: string) => {
         setCompletedSets(prev => {
             const next = new Set(prev);
             if (next.has(setId)) next.delete(setId);
-            else { next.add(setId); setRestAutoStart(true); setShowRestTimer(true); }
+            else {
+                next.add(setId);
+                setRestAutoStart(true);
+                setShowRestTimer(true);
+                triggerHaptic('success');
+            }
             return next;
         });
-    };
+    }, []);
 
-    const handleDelete = async (seId: string, setId: string) => {
+    const handleSetDelete = React.useCallback(async (seId: string, setId: string) => {
         await deleteSet(seId, setId);
         setLocalSets(prev => { const n = { ...prev }; delete n[setId]; return n; });
         setCompletedSets(prev => { const n = new Set(prev); n.delete(setId); return n; });
-    };
-
-    const [exerciseToRemove, setExerciseToRemove] = useState<string | null>(null);
-    const [showEmptyWarning, setShowEmptyWarning] = useState(false);
+    }, [deleteSet]);
 
     const handleFinish = async () => {
         setShowFinishConfirm(false);
-
         const hasCompletedSet = completedSets.size > 0;
         if (!hasCompletedSet) {
             setShowEmptyWarning(true);
             return;
         }
 
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
         const mins = Math.round((Date.now() - startTime.getTime()) / 60000);
+        let totalVolume = 0;
+        let maxWeight = 0;
+        let bestExercise = '';
+        activeExercises.forEach(ex => {
+            ex.sets.forEach(s => {
+                if (completedSets.has(s.id)) {
+                    const w = s.weight || 0;
+                    const r = s.reps || 0;
+                    totalVolume += w * r;
+                    if (w > maxWeight) { maxWeight = w; bestExercise = ex.exerciseName; }
+                }
+            });
+        });
+        const workoutSummary = {
+            name: templateName || 'Custom Workout',
+            duration: mins,
+            volume: totalVolume,
+            topLift: maxWeight > 0 ? { name: bestExercise, weight: maxWeight } : undefined,
+        };
+
         const result = await finishWorkout(mins);
         if (result.smartUpdates && result.smartUpdates.length > 0) {
+            pendingSummaryRef.current = workoutSummary;
             setSmartUpdates(result.smartUpdates);
             setShowSmartPrompt(true);
-        } else { navigation.popToTop(); clearWorkout(); }
+        } else {
+            clearWorkout();
+            navigation.replace('WorkoutSummary', { workoutData: workoutSummary });
+        }
     };
 
     const confirmRemoveExercise = async () => {
@@ -110,11 +139,28 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
         }
     };
 
+    const renderExercises = React.useMemo(() => {
+        return activeExercises.map((ex, index) => (
+            <AnimatedListItem key={ex.id} index={index}>
+                <ActiveExerciseCard
+                    exercise={ex}
+                    completedSets={completedSets}
+                    localSets={localSets}
+                    onRemoveExercise={() => setExerciseToRemove(ex.id)}
+                    onAddSet={() => addSet(ex.id)}
+                    onDeleteSet={(setId) => handleSetDelete(ex.id, setId)}
+                    onCompleteSet={handleSetComplete}
+                    onSetChange={handleSetChange}
+                />
+            </AnimatedListItem>
+        ));
+    }, [activeExercises, completedSets, localSets, addSet, handleSetDelete, handleSetComplete, handleSetChange]);
+
     if (isFinishing && !showSmartPrompt) {
         return (
             <View style={[styles.container, styles.center]}>
                 <ActivityIndicator size="large" color={appColors.accent} />
-                <Text style={{ color: appColors.textSecondary, marginTop: 16, fontSize: 15 }}>Saving workout...</Text>
+                <Text style={{ color: '#888', marginTop: 16, fontSize: 14, fontFamily: appFonts.semiBold }}>Saving workout...</Text>
             </View>
         );
     }
@@ -122,181 +168,123 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
     if (!session) {
         return (
             <View style={[styles.container, styles.center]}>
-                <Text style={{ color: '#fff', fontSize: 20, fontWeight: '700' }}>No active workout</Text>
-                <Button mode="text" onPress={() => navigation.popToTop()} textColor={appColors.accent} style={{ marginTop: 12 }}>Go Back</Button>
+                <Text style={{ color: '#fff', fontSize: 18, fontFamily: appFonts.bold }}>No active workout</Text>
+                <TouchableOpacity onPress={() => navigation.popToTop()} style={{ marginTop: 16, paddingVertical: 10, paddingHorizontal: 20 }}>
+                    <Text style={{ color: appColors.accent, fontFamily: appFonts.bold, fontSize: 15 }}>Go Back</Text>
+                </TouchableOpacity>
             </View>
         );
     }
 
     return (
         <AnimatedScreen style={styles.container}>
-            {/* Top bar */}
+            {/* ═══ Top Bar ═══ */}
             <View style={styles.topBar}>
-                <TouchableOpacity onPress={() => setShowCancelConfirm(true)} style={styles.cancelLink}>
-                    <Text style={{ color: appColors.danger, fontWeight: '700' }}>Cancel</Text>
+                <TouchableOpacity onPress={() => setShowCancelConfirm(true)} style={styles.cancelBtn}>
+                    <Text style={styles.cancelText}>Cancel</Text>
                 </TouchableOpacity>
-                <WorkoutTimer startTime={startTime} />
-                <Button
-                    mode="outlined"
+
+                <View style={styles.timerWrap}>
+                    <WorkoutTimer startTime={startTime} isRestActive={showRestTimer} />
+                </View>
+
+                <TouchableOpacity
                     onPress={() => { setRestAutoStart(false); setShowRestTimer(prev => !prev); }}
-                    style={styles.restBtn}
-                    textColor={appColors.textSecondary}
-                    icon={() => <Timer size={18} color={appColors.textSecondary} />}
-                    compact
+                    style={[styles.restBtn, showRestTimer && styles.restBtnActive]}
                 >
-                    Rest
-                </Button>
+                    <Timer size={16} color={showRestTimer ? appColors.accent : '#888'} />
+                    <Text style={[styles.restBtnText, showRestTimer && { color: appColors.accent }]}>Rest</Text>
+                </TouchableOpacity>
             </View>
 
             {showRestTimer && (
                 <RestTimer onClose={() => { setShowRestTimer(false); setRestAutoStart(false); }} autoStart={restAutoStart} />
             )}
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
-                {activeExercises.map((ex, index) => (
-                    <AnimatedListItem key={ex.id} index={index}>
-                        <Card style={styles.exerciseCard} mode="contained">
-                            <Card.Content>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                                    <View style={{ flex: 1, marginRight: 12 }}>
-                                        <Text style={styles.exerciseName} numberOfLines={1}>{ex.exerciseName}</Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        onPress={() => setExerciseToRemove(ex.id)}
-                                        style={{ padding: 4 }}
-                                    >
-                                        <X size={20} color={appColors.textTertiary} />
-                                    </TouchableOpacity>
-                                </View>
+            {/* ═══ Exercise List ═══ */}
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                {renderExercises}
 
-                                <View style={styles.headerRow}>
-                                    <Text style={[styles.colHeader, { width: 36 }]}>SET</Text>
-                                    <Text style={[styles.colHeader, { flex: 1 }]}>KG</Text>
-                                    <Text style={[styles.colHeader, { flex: 1 }]}>REPS</Text>
-                                    <View style={{ width: 76 }} />
-                                </View>
-                                <Divider style={{ backgroundColor: appColors.border, marginBottom: 8 }} />
-
-                                <AnimatePresence>
-                                    {ex.sets.sort((a, b) => a.set_number - b.set_number).map((set) => {
-                                        const done = completedSets.has(set.id);
-                                        return (
-                                            <MotiView
-                                                key={set.id}
-                                                from={{ opacity: 0, scale: 0.9, translateY: -10 }}
-                                                animate={{ opacity: 1, scale: 1, translateY: 0 }}
-                                                exit={{ opacity: 0, scale: 0.9, translateY: -10 }}
-                                                transition={{ type: 'timing', duration: 300 }}
-                                                style={[styles.setRow, done && styles.setDone]}
-                                            >
-                                                <View style={[styles.setNum, done && { backgroundColor: appColors.success }]}>
-                                                    <Text style={{ fontSize: 14, fontWeight: '800', color: done ? '#000' : appColors.textSecondary }}>
-                                                        {set.set_number}
-                                                    </Text>
-                                                </View>
-                                                <TextInput style={styles.setInput} mode="outlined" dense keyboardType="numeric"
-                                                    value={getVal(set.id, 'weight', set.weight)} onChangeText={v => handleChange(set.id, 'weight', v)}
-                                                    placeholder="0" disabled={done} outlineStyle={styles.inputOutline}
-                                                    outlineColor={appColors.border} activeOutlineColor={appColors.accent} textColor="#fff" />
-                                                <TextInput style={styles.setInput} mode="outlined" dense keyboardType="numeric"
-                                                    value={getVal(set.id, 'reps', set.reps)} onChangeText={v => handleChange(set.id, 'reps', v)}
-                                                    placeholder="0" disabled={done} outlineStyle={styles.inputOutline}
-                                                    outlineColor={appColors.border} activeOutlineColor={appColors.accent} textColor="#fff" />
-                                                <View style={styles.setActions}>
-                                                    <TouchableOpacity onPress={() => handleComplete(set.id)} style={{ padding: 8 }}>
-                                                        {done ? (
-                                                            <CheckCircle size={24} color={appColors.success} fill={appColors.success + '20'} />
-                                                        ) : (
-                                                            <CheckCircle size={24} color={appColors.textTertiary} />
-                                                        )}
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity onPress={() => handleDelete(ex.id, set.id)} disabled={done} style={{ padding: 8 }}>
-                                                        <X size={18} color={done ? appColors.textTertiary : appColors.danger} />
-                                                    </TouchableOpacity>
-                                                </View>
-                                            </MotiView>
-                                        );
-                                    })}
-                                </AnimatePresence>
-
-                                <Button
-                                    mode="text"
-                                    onPress={() => addSet(ex.id)}
-                                    textColor={appColors.accent}
-                                    compact
-                                    style={{ marginTop: 6 }}
-                                    labelStyle={{ fontSize: 14, fontWeight: '700' }}
-                                    icon={() => <Plus size={18} color={appColors.accent} strokeWidth={3} />}
-                                >
-                                    Add Set
-                                </Button>
-                            </Card.Content>
-                        </Card>
-                    </AnimatedListItem>
-                ))}
-
-                <Button
-                    mode="outlined"
+                {/* Add Exercise */}
+                <TouchableOpacity
                     onPress={() => setShowExercisePicker(true)}
-                    textColor={appColors.accent}
-                    style={{ marginTop: 8, borderColor: appColors.border, borderStyle: 'dashed' }}
-                    icon={() => <Plus size={20} color={appColors.accent} />}
+                    style={styles.addExBtn}
+                    activeOpacity={0.7}
                 >
-                    Add Exercise
-                </Button>
+                    <Plus size={18} color={appColors.accent} strokeWidth={2.5} />
+                    <Text style={styles.addExText}>Add Exercise</Text>
+                </TouchableOpacity>
             </ScrollView>
 
+            {/* ═══ Sticky Footer ═══ */}
             <View style={styles.footer}>
-                <Button
-                    mode="contained"
-                    onPress={() => setShowFinishConfirm(true)}
-                    buttonColor={appColors.accent}
-                    textColor="#000"
-                    style={{ borderRadius: 8 }}
-                    contentStyle={{ height: 56 }}
-                    labelStyle={{ fontSize: 16, fontWeight: '900', letterSpacing: 1 }}
-                    icon={() => <Check size={20} color="#000" strokeWidth={3} />}
+                <MotiPressable
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        setShowFinishConfirm(true);
+                    }}
+                    animate={({ pressed }) => {
+                        'worklet';
+                        return { scale: pressed ? 0.97 : 1 };
+                    }}
+                    transition={{ type: 'spring', damping: 15, stiffness: 200 }}
+                    style={styles.finishBtn}
                 >
-                    Finish Workout
-                </Button>
+                    <Check size={20} color="#000" strokeWidth={3} />
+                    <Text style={styles.finishBtnText}>Finish Workout</Text>
+                </MotiPressable>
             </View>
 
+            {/* ═══ Dialogs ═══ */}
             <Portal>
+                {/* Finish Confirm */}
                 <Dialog visible={showFinishConfirm} onDismiss={() => setShowFinishConfirm(false)} style={styles.dialog}>
                     <Dialog.Title style={styles.dialogTitle}>Finish Workout?</Dialog.Title>
-                    <Dialog.Content><Text style={styles.dialogText}>Make sure all sets are logged.</Text></Dialog.Content>
+                    <Dialog.Content>
+                        <Text style={styles.dialogText}>Make sure all sets are logged before finishing.</Text>
+                    </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setShowFinishConfirm(false)} textColor={appColors.textSecondary}>Close</Button>
+                        <Button onPress={() => setShowFinishConfirm(false)} textColor="#888">Not Yet</Button>
                         <Button onPress={handleFinish} textColor={appColors.accent}>Finish</Button>
                     </Dialog.Actions>
                 </Dialog>
 
+                {/* Empty Warning */}
                 <Dialog visible={showEmptyWarning} onDismiss={() => setShowEmptyWarning(false)} style={styles.dialog}>
-                    <Dialog.Title style={styles.dialogTitle}>Empty Workout</Dialog.Title>
-                    <Dialog.Content><Text style={styles.dialogText}>You haven't completed any sets yet. Please log at least one set before finishing, or cancel the workout instead.</Text></Dialog.Content>
+                    <Dialog.Title style={styles.dialogTitle}>No Sets Completed</Dialog.Title>
+                    <Dialog.Content>
+                        <Text style={styles.dialogText}>Complete at least one set before finishing, or cancel the workout.</Text>
+                    </Dialog.Content>
                     <Dialog.Actions>
                         <Button onPress={() => setShowEmptyWarning(false)} textColor={appColors.accent}>Got it</Button>
                     </Dialog.Actions>
                 </Dialog>
 
+                {/* Remove Exercise */}
                 <Dialog visible={!!exerciseToRemove} onDismiss={() => setExerciseToRemove(null)} style={styles.dialog}>
                     <Dialog.Title style={styles.dialogTitle}>Remove Exercise?</Dialog.Title>
-                    <Dialog.Content><Text style={styles.dialogText}>This will remove the exercise and all its logged sets from this session.</Text></Dialog.Content>
+                    <Dialog.Content>
+                        <Text style={styles.dialogText}>This will remove the exercise and all its logged sets.</Text>
+                    </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setExerciseToRemove(null)} textColor={appColors.textSecondary}>Cancel</Button>
+                        <Button onPress={() => setExerciseToRemove(null)} textColor="#888">Keep</Button>
                         <Button onPress={confirmRemoveExercise} textColor={appColors.danger}>Remove</Button>
                     </Dialog.Actions>
                 </Dialog>
 
+                {/* Cancel Confirm */}
                 <Dialog visible={showCancelConfirm} onDismiss={() => setShowCancelConfirm(false)} style={styles.dialog}>
                     <Dialog.Title style={styles.dialogTitle}>Cancel Workout?</Dialog.Title>
-                    <Dialog.Content><Text style={styles.dialogText}>This will delete the current session and all logged data. This cannot be undone.</Text></Dialog.Content>
+                    <Dialog.Content>
+                        <Text style={styles.dialogText}>All logged data will be lost. This cannot be undone.</Text>
+                    </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setShowCancelConfirm(false)} textColor={appColors.textSecondary}>No, Resume</Button>
-                        <Button onPress={handleCancel} textColor={appColors.danger}>Yes, Cancel</Button>
+                        <Button onPress={() => setShowCancelConfirm(false)} textColor="#888">Resume</Button>
+                        <Button onPress={handleCancel} textColor={appColors.danger}>Discard</Button>
                     </Dialog.Actions>
                 </Dialog>
 
+                {/* Exercise Picker */}
                 <Dialog visible={showExercisePicker} onDismiss={() => setShowExercisePicker(false)} style={[styles.dialog, { maxHeight: '80%' }]}>
                     <Dialog.Title style={styles.dialogTitle}>Add Exercise</Dialog.Title>
                     <Dialog.Content>
@@ -304,10 +292,7 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
                             data={exercises}
                             keyExtractor={item => item.id}
                             renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    onPress={() => handleAddExercise(item)}
-                                    style={styles.pickerItem}
-                                >
+                                <TouchableOpacity onPress={() => handleAddExercise(item)} style={styles.pickerItem}>
                                     <Text style={styles.pickerName}>{item.name}</Text>
                                     <Text style={styles.pickerSub}>{item.muscle_group}</Text>
                                 </TouchableOpacity>
@@ -315,53 +300,41 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
                             ListFooterComponent={
                                 exercises.length > 0 ? (
                                     <View style={{ borderTopWidth: 1, borderTopColor: appColors.border, marginTop: 16 }}>
-                                        <Button
-                                            mode="text"
-                                            onPress={() => {
-                                                setShowExercisePicker(false);
-                                                setShowCreateExercise(true);
-                                            }}
-                                            textColor={appColors.accent}
-                                            style={{ marginTop: 12 }}
-                                            labelStyle={{ fontWeight: '800' }}
-                                            icon={() => <Plus size={18} color={appColors.accent} />}
+                                        <TouchableOpacity
+                                            onPress={() => { setShowExercisePicker(false); setShowCreateExercise(true); }}
+                                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14 }}
                                         >
-                                            Create New Exercise
-                                        </Button>
+                                            <Plus size={16} color={appColors.accent} />
+                                            <Text style={{ color: appColors.accent, fontFamily: appFonts.bold, fontSize: 14 }}>Create New Exercise</Text>
+                                        </TouchableOpacity>
                                     </View>
                                 ) : null
                             }
                             ListEmptyComponent={
                                 <View style={{ paddingVertical: 40, alignItems: 'center' }}>
-                                    <Text style={{ color: appColors.textTertiary, marginBottom: 20, textAlign: 'center' }}>
-                                        You haven't created any exercises yet.
+                                    <Text style={{ color: '#888', marginBottom: 20, textAlign: 'center', fontSize: 13 }}>
+                                        No exercises created yet.
                                     </Text>
-                                    <Button
-                                        mode="contained"
-                                        onPress={() => {
-                                            setShowExercisePicker(false);
-                                            setShowCreateExercise(true);
-                                        }}
-                                        buttonColor={appColors.accent}
-                                        textColor="#000"
-                                        style={{ borderRadius: 8, width: '100%' }}
-                                        labelStyle={{ fontWeight: '900' }}
-                                        icon={() => <Plus size={18} color="#000" />}
+                                    <TouchableOpacity
+                                        onPress={() => { setShowExercisePicker(false); setShowCreateExercise(true); }}
+                                        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: appColors.accent, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 }}
                                     >
-                                        Create First Exercise
-                                    </Button>
+                                        <Plus size={16} color="#000" />
+                                        <Text style={{ color: '#000', fontFamily: appFonts.bold, fontSize: 14 }}>Create First Exercise</Text>
+                                    </TouchableOpacity>
                                 </View>
                             }
                         />
                     </Dialog.Content>
                 </Dialog>
 
+                {/* Create Exercise */}
                 <Dialog visible={showCreateExercise} onDismiss={() => setShowCreateExercise(false)} style={styles.dialog}>
                     <Dialog.Title style={styles.dialogTitle}>Create Exercise</Dialog.Title>
                     <Dialog.Content>
                         <TextInput label="Name" value={newExName} onChangeText={setNewExName} mode="outlined" />
                         <View style={{ marginTop: 12 }}>
-                            <Text style={{ color: appColors.textTertiary, fontSize: 12, marginBottom: 8 }}>Muscle Group</Text>
+                            <Text style={{ color: '#888', fontSize: 11, marginBottom: 8, fontFamily: appFonts.bold }}>Muscle Group</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                 {['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core', 'Cardio'].map(m => (
                                     <Chip
@@ -377,8 +350,8 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
                         </View>
                     </Dialog.Content>
                     <Dialog.Actions>
-                        <Button onPress={() => setShowCreateExercise(false)}>Cancel</Button>
-                        <Button onPress={handleCreateExercise} disabled={!newExName}>Create & Add</Button>
+                        <Button onPress={() => setShowCreateExercise(false)} textColor="#888">Cancel</Button>
+                        <Button onPress={handleCreateExercise} disabled={!newExName} textColor={appColors.accent}>Create & Add</Button>
                     </Dialog.Actions>
                 </Dialog>
             </Portal>
@@ -386,33 +359,126 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
             <SmartSetsPrompt visible={showSmartPrompt} updates={smartUpdates}
                 onAccept={async (id, n) => { await updateDefaultSets(id, n); setSmartUpdates(p => p.filter(u => u.exerciseId !== id)); }}
                 onSkip={id => setSmartUpdates(p => p.filter(u => u.exerciseId !== id))}
-                onClose={() => { setShowSmartPrompt(false); navigation.popToTop(); clearWorkout(); }} />
+                onClose={() => {
+                    setShowSmartPrompt(false);
+                    const summary = pendingSummaryRef.current;
+                    clearWorkout();
+                    if (summary) {
+                        navigation.replace('WorkoutSummary', { workoutData: summary });
+                    } else {
+                        navigation.popToTop();
+                    }
+                }} />
         </AnimatedScreen>
     );
 };
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: appColors.bg },
-    center: { justifyContent: 'center', alignItems: 'center' },
-    topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 52, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: appColors.border, backgroundColor: appColors.cardBg },
-    cancelLink: { paddingRight: 10, minWidth: 60 },
-    restBtn: { borderRadius: 8, borderColor: appColors.border },
-    scrollContent: { padding: 20, paddingBottom: 130 },
-    exerciseCard: { marginBottom: 16, borderRadius: 8, borderWidth: 1, borderColor: appColors.border, backgroundColor: appColors.cardBg },
-    exerciseName: { ...appTypography.h1, color: '#fff', fontSize: 26, marginBottom: 16 },
-    headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-    colHeader: { ...appTypography.small, color: appColors.textSecondary, textAlign: 'center', letterSpacing: 1.5, fontSize: 11 },
-    setRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 8, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 6 },
-    setDone: { backgroundColor: appColors.accent + '15' },
-    setNum: { width: 36, height: 36, borderRadius: 8, backgroundColor: appColors.inputBg, justifyContent: 'center', alignItems: 'center' },
-    setInput: { ...appTypography.body, flex: 1, height: 56, textAlign: 'center', backgroundColor: appColors.bg, fontSize: 18, fontFamily: appFonts.bold },
-    inputOutline: { borderRadius: 6 },
-    setActions: { flexDirection: 'row', width: 76, justifyContent: 'flex-end' },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+    // ═══ Top Bar ═══
+    topBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 54,
+        paddingBottom: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: appColors.border,
+        backgroundColor: appColors.cardBg,
+    },
+    cancelBtn: {
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+        minWidth: 56,
+    },
+    cancelText: {
+        color: '#888',
+        fontSize: 13,
+        fontFamily: appFonts.semiBold,
+    },
+    timerWrap: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    restBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingVertical: 7,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: appColors.border,
+        minWidth: 56,
+        justifyContent: 'center',
+    },
+    restBtnText: {
+        color: '#888',
+        fontSize: 12,
+        fontFamily: appFonts.bold,
+    },
+    restBtnActive: {
+        borderColor: appColors.accent + '50',
+        backgroundColor: appColors.accent + '10',
+    },
+
+    // ═══ Scroll ═══
+    scrollContent: { padding: 20, paddingBottom: 120 },
+
+    // ═══ Add Exercise ═══
+    addExBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 14,
+        marginTop: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: appColors.border,
+        borderStyle: 'dashed',
+    },
+    addExText: {
+        color: appColors.accent,
+        fontSize: 14,
+        fontFamily: appFonts.bold,
+    },
+
+    // ═══ Footer ═══
+    footer: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 30,
+        backgroundColor: appColors.bg,
+        borderTopWidth: 1,
+        borderTopColor: appColors.border,
+    },
+    finishBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        height: 56,
+        borderRadius: 14,
+        backgroundColor: appColors.accent,
+    },
+    finishBtnText: {
+        color: '#000',
+        fontSize: 16,
+        fontFamily: appFonts.black,
+        letterSpacing: 0.5,
+    },
+
+    // ═══ Dialogs ═══
+    dialog: { backgroundColor: appColors.cardBg, borderRadius: 16, paddingBottom: 8 },
+    dialogTitle: { ...appTypography.h2, color: '#fff', marginTop: 8, fontSize: 20, fontFamily: appFonts.bold },
+    dialogText: { ...appTypography.body, color: '#888', lineHeight: 22, fontSize: 13 },
+
+    // ═══ Exercise Picker ═══
     pickerItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: appColors.border },
-    pickerName: { ...appTypography.h2, color: '#fff', fontSize: 16 },
-    pickerSub: { ...appTypography.small, color: appColors.textSecondary, fontSize: 12, marginTop: 2, fontFamily: appFonts.bold },
-    footer: { padding: 20, paddingBottom: 32 },
-    dialog: { backgroundColor: appColors.cardBg, borderRadius: 12, paddingBottom: 8 },
-    dialogTitle: { ...appTypography.h2, color: '#fff', marginTop: 8, fontSize: 22 },
-    dialogText: { ...appTypography.body, color: appColors.textSecondary, lineHeight: 22 },
+    pickerName: { ...appTypography.h2, color: '#fff', fontSize: 15, fontFamily: appFonts.bold },
+    pickerSub: { ...appTypography.small, color: '#888', fontSize: 11, marginTop: 2, fontFamily: appFonts.semiBold },
 });

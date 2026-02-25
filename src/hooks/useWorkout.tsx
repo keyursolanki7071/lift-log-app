@@ -12,6 +12,7 @@ interface ActiveExercise extends SessionExercise {
 interface WorkoutContextType {
     session: WorkoutSession | null;
     activeExercises: ActiveExercise[];
+    templateName: string | null;
     loading: boolean;
     isFinishing: boolean;
     error: string | null;
@@ -34,6 +35,7 @@ export const WorkoutProvider: React.FC<{ children: ReactNode }> = ({ children })
     const { user } = useAuth();
     const [session, setSession] = useState<WorkoutSession | null>(null);
     const [activeExercises, setActiveExercises] = useState<ActiveExercise[]>([]);
+    const [templateName, setTemplateName] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [isFinishing, setIsFinishing] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -88,6 +90,15 @@ export const WorkoutProvider: React.FC<{ children: ReactNode }> = ({ children })
             }
 
             setActiveExercises(exercises);
+
+            // Fetch template name 
+            const { data: tmplData } = await supabase
+                .from('workout_templates')
+                .select('name')
+                .eq('id', templateId)
+                .single();
+            setTemplateName(tmplData?.name || 'Custom Workout');
+
             setLoading(false);
             return { error: null, session: sessionData };
         } catch (err: any) {
@@ -313,7 +324,7 @@ export const WorkoutProvider: React.FC<{ children: ReactNode }> = ({ children })
     return (
         <WorkoutContext.Provider
             value={{
-                session, activeExercises, loading, isFinishing, error,
+                session, activeExercises, templateName, loading, isFinishing, error,
                 startWorkout, updateSet, addSet, deleteSet,
                 finishWorkout, cancelWorkout, addExerciseToSession, removeExerciseFromSession, clearWorkout, updateDefaultSets,
                 deleteSession,
