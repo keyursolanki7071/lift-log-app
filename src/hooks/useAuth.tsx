@@ -19,31 +19,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Safety timeout — never show loader for more than 10 seconds
+        const timeout = setTimeout(() => setLoading(false), 10000);
+
         // Restore persisted session on app launch
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-        });
+        supabase.auth.getSession()
+            .then(({ data: { session } }) => {
+                setSession(session);
+                setUser(session?.user ?? null);
+            })
+            .catch(() => {
+                // Network failure (common on mobile data) — don't crash,
+                // just let the user through to login or cached session
+            })
+            .finally(() => {
+                clearTimeout(timeout);
+                setLoading(false);
+            });
 
         // Only clear session on explicit sign-out — never on token refresh failures
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_OUT') {
-                // User explicitly signed out
                 setSession(null);
                 setUser(null);
             } else if (session) {
-                // SIGNED_IN, TOKEN_REFRESHED, INITIAL_SESSION, etc.
                 setSession(session);
                 setUser(session.user);
             }
-            // If event is not SIGNED_OUT and session is null (e.g. token refresh
-            // failed due to network), we keep the existing session alive so the
-            // user stays logged in.
+            clearTimeout(timeout);
             setLoading(false);
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            clearTimeout(timeout);
+            subscription.unsubscribe();
+        };
     }, []);
 
     const signUp = async (email: string, password: string) => {
