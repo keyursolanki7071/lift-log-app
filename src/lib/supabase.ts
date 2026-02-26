@@ -1,3 +1,4 @@
+import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
@@ -6,31 +7,31 @@ const supabaseUrl = 'https://kzskyeeryakzguqlbkno.supabase.co';
 const supabaseAnonKey = 'sb_publishable_i2YYUzgyJT5f6NAV9tweHw_uzvn18kD';
 
 const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => {
+  getItem: async (key: string) => {
     if (Platform.OS === 'web') {
-      return localStorage.getItem(key);
+      return Promise.resolve(localStorage.getItem(key));
     }
-    return SecureStore.getItemAsync(key);
+    return await SecureStore.getItemAsync(key);
   },
-  setItem: (key: string, value: string) => {
+  setItem: async (key: string, value: string) => {
     if (Platform.OS === 'web') {
       localStorage.setItem(key, value);
-      return;
+      return Promise.resolve();
     }
-    return SecureStore.setItemAsync(key, value);
+    return await SecureStore.setItemAsync(key, value);
   },
-  removeItem: (key: string) => {
+  removeItem: async (key: string) => {
     if (Platform.OS === 'web') {
       localStorage.removeItem(key);
-      return;
+      return Promise.resolve();
     }
-    return SecureStore.deleteItemAsync(key);
+    return await SecureStore.deleteItemAsync(key);
   },
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: ExpoSecureStoreAdapter as any,
+    storage: ExpoSecureStoreAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
