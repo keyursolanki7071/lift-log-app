@@ -14,14 +14,19 @@ export const useBodyMetrics = () => {
         if (!user) return;
         setLoading(true);
         setError(null);
-        const { data, error: err } = await supabase
-            .from('body_metrics')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('date', { ascending: false });
-        if (err) setError(err.message);
-        else setMetrics(data || []);
-        setLoading(false);
+        try {
+            const { data, error: err } = await supabase
+                .from('body_metrics')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('date', { ascending: false });
+            if (err) throw err;
+            setMetrics(data || []);
+        } catch (err: any) {
+            setError(err.message || 'Failed to load body metrics');
+        } finally {
+            setLoading(false);
+        }
     }, [user]);
 
     useEffect(() => {
@@ -31,59 +36,67 @@ export const useBodyMetrics = () => {
     const logMetric = async (weight: number | null, waist: number | null, photoUri: string | null) => {
         if (!user) return { error: 'Not authenticated' };
 
-        let photoUrl: string | null = null;
+        try {
+            let photoUrl: string | null = null;
 
-        if (photoUri) {
-            const fileName = `${user.id}/${Date.now()}.jpg`;
-            const response = await fetch(photoUri);
-            const blob = await response.blob();
-            const arrayBuffer = await new Response(blob).arrayBuffer();
+            if (photoUri) {
+                const fileName = `${user.id}/${Date.now()}.jpg`;
+                const response = await fetch(photoUri);
+                const blob = await response.blob();
+                const arrayBuffer = await new Response(blob).arrayBuffer();
 
-            const { error: uploadErr } = await supabase.storage
-                .from('progress-photos')
-                .upload(fileName, arrayBuffer, {
-                    contentType: 'image/jpeg',
-                    upsert: false,
-                });
+                const { error: uploadErr } = await supabase.storage
+                    .from('progress-photos')
+                    .upload(fileName, arrayBuffer, {
+                        contentType: 'image/jpeg',
+                        upsert: false,
+                    });
 
-            if (uploadErr) return { error: uploadErr.message };
+                if (uploadErr) throw uploadErr;
 
-            const { data: urlData } = supabase.storage
-                .from('progress-photos')
-                .getPublicUrl(fileName);
+                const { data: urlData } = supabase.storage
+                    .from('progress-photos')
+                    .getPublicUrl(fileName);
 
-            photoUrl = urlData.publicUrl;
+                photoUrl = urlData.publicUrl;
+            }
+
+            const { data, error: err } = await supabase
+                .from('body_metrics')
+                .insert({
+                    user_id: user.id,
+                    weight,
+                    waist,
+                    photo_url: photoUrl,
+                })
+                .select()
+                .single();
+
+            if (err) throw err;
+            setMetrics(prev => [data, ...prev]);
+            return { error: null, data };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to save body metric' };
         }
-
-        const { data, error: err } = await supabase
-            .from('body_metrics')
-            .insert({
-                user_id: user.id,
-                weight,
-                waist,
-                photo_url: photoUrl,
-            })
-            .select()
-            .single();
-
-        if (err) return { error: err.message };
-        setMetrics(prev => [data, ...prev]);
-        return { error: null, data };
     };
 
     const pickImage = async (): Promise<string | null> => {
-        const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permResult.granted) return null;
+        try {
+            const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!permResult.granted) return null;
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            quality: 0.7,
-            allowsEditing: true,
-            aspect: [3, 4],
-        });
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                quality: 0.7,
+                allowsEditing: true,
+                aspect: [3, 4],
+            });
 
-        if (result.canceled) return null;
-        return result.assets[0].uri;
+            if (result.canceled) return null;
+            return result.assets[0].uri;
+        } catch {
+            return null;
+        }
     };
 
     return { metrics, loading, error, fetchMetrics, logMetric, pickImage };

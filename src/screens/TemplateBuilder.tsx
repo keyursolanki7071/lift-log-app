@@ -12,6 +12,7 @@ import { useExercises } from '../hooks/useExercises';
 import { useWorkout } from '../hooks/useWorkout';
 import { appColors, appFonts, appTypography } from '../theme';
 import { AnimatedScreen } from '../components/AnimatedScreen';
+import { useErrorToast } from '../components/ErrorToast';
 
 export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
     const { templateId, templateName } = route.params;
@@ -22,6 +23,7 @@ export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = 
     const [showPicker, setShowPicker] = useState(false);
     const [menuId, setMenuId] = useState<string | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const { showError } = useErrorToast();
 
     useEffect(() => { loadExercises(); }, []);
 
@@ -30,14 +32,16 @@ export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = 
     const handleAdd = async (exerciseId: string) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setShowPicker(false);
-        await addExerciseToTemplate(templateId, exerciseId, templateExercises.length + 1);
+        const result = await addExerciseToTemplate(templateId, exerciseId, templateExercises.length + 1);
+        if (result?.error) { showError(result.error); return; }
         loadExercises();
     };
 
     const confirmDelete = async () => {
         if (!deleteId) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await removeExerciseFromTemplate(deleteId);
+        const result = await removeExerciseFromTemplate(deleteId);
+        if (result?.error) { showError(result.error); return; }
         setDeleteId(null);
         loadExercises();
     };
@@ -46,7 +50,8 @@ export const TemplateBuilderScreen: React.FC<{ navigation: any; route: any }> = 
         if (templateExercises.length === 0) return;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         const result = await startWorkout(templateId, templateExercises);
-        if (!result.error) navigation.navigate('Dashboard', { screen: 'ActiveWorkout' });
+        if (result.error) { showError(result.error); return; }
+        navigation.navigate('Dashboard', { screen: 'ActiveWorkout' });
     };
 
     const available = exercises.filter(e => !templateExercises.some(te => te.exercise_id === e.id));

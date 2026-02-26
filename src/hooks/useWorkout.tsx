@@ -109,174 +109,200 @@ export const WorkoutProvider: React.FC<{ children: ReactNode }> = ({ children })
     };
 
     const updateSet = async (setId: string, weight: number | null, reps: number | null) => {
-        const { error: err } = await supabase
-            .from('sets')
-            .update({ weight, reps })
-            .eq('id', setId);
+        try {
+            const { error: err } = await supabase
+                .from('sets')
+                .update({ weight, reps })
+                .eq('id', setId);
 
-        if (err) return { error: err.message };
+            if (err) throw err;
 
-        setActiveExercises(prev =>
-            prev.map(ex => ({
-                ...ex,
-                sets: ex.sets.map(s => s.id === setId ? { ...s, weight, reps } : s),
-            }))
-        );
-        return { error: null };
+            setActiveExercises(prev =>
+                prev.map(ex => ({
+                    ...ex,
+                    sets: ex.sets.map(s => s.id === setId ? { ...s, weight, reps } : s),
+                }))
+            );
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to update set' };
+        }
     };
 
     const addSet = async (sessionExerciseId: string) => {
         const exercise = activeExercises.find(e => e.id === sessionExerciseId);
         if (!exercise) return { error: 'Exercise not found' };
 
-        const maxSetNumber = Math.max(...exercise.sets.map(s => s.set_number), 0);
+        try {
+            const maxSetNumber = Math.max(...exercise.sets.map(s => s.set_number), 0);
 
-        const { data, error: err } = await supabase
-            .from('sets')
-            .insert({
-                session_exercise_id: sessionExerciseId,
-                set_number: maxSetNumber + 1,
-                weight: null,
-                reps: null,
-            })
-            .select()
-            .single();
+            const { data, error: err } = await supabase
+                .from('sets')
+                .insert({
+                    session_exercise_id: sessionExerciseId,
+                    set_number: maxSetNumber + 1,
+                    weight: null,
+                    reps: null,
+                })
+                .select()
+                .single();
 
-        if (err) return { error: err.message };
+            if (err) throw err;
 
-        setActiveExercises(prev =>
-            prev.map(ex =>
-                ex.id === sessionExerciseId
-                    ? { ...ex, sets: [...ex.sets, data] }
-                    : ex
-            )
-        );
-        return { error: null };
+            setActiveExercises(prev =>
+                prev.map(ex =>
+                    ex.id === sessionExerciseId
+                        ? { ...ex, sets: [...ex.sets, data] }
+                        : ex
+                )
+            );
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to add set' };
+        }
     };
 
     const deleteSet = async (sessionExerciseId: string, setId: string) => {
-        const { error: err } = await supabase
-            .from('sets')
-            .delete()
-            .eq('id', setId);
+        try {
+            const { error: err } = await supabase
+                .from('sets')
+                .delete()
+                .eq('id', setId);
 
-        if (err) return { error: err.message };
+            if (err) throw err;
 
-        setActiveExercises(prev =>
-            prev.map(ex =>
-                ex.id === sessionExerciseId
-                    ? {
-                        ...ex,
-                        sets: ex.sets
-                            .filter(s => s.id !== setId)
-                            .map((s, i) => ({ ...s, set_number: i + 1 })),
-                    }
-                    : ex
-            )
-        );
-        return { error: null };
+            setActiveExercises(prev =>
+                prev.map(ex =>
+                    ex.id === sessionExerciseId
+                        ? {
+                            ...ex,
+                            sets: ex.sets
+                                .filter(s => s.id !== setId)
+                                .map((s, i) => ({ ...s, set_number: i + 1 })),
+                        }
+                        : ex
+                )
+            );
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to delete set' };
+        }
     };
 
     const finishWorkout = async (durationMinutes: number) => {
         if (!session) return { error: 'No active session' };
         setIsFinishing(true);
 
-        const { error: err } = await supabase
-            .from('workout_sessions')
-            .update({ status: 'completed', duration_minutes: durationMinutes })
-            .eq('id', session.id);
+        try {
+            const { error: err } = await supabase
+                .from('workout_sessions')
+                .update({ status: 'completed', duration_minutes: durationMinutes })
+                .eq('id', session.id);
 
-        if (err) {
-            setIsFinishing(false);
-            return { error: err.message };
-        }
+            if (err) throw err;
 
-        const smartUpdates: { exerciseId: string; exerciseName: string; actual: number; default: number }[] = [];
+            const smartUpdates: { exerciseId: string; exerciseName: string; actual: number; default: number }[] = [];
 
-        for (const ex of activeExercises) {
-            const filledSets = ex.sets.filter(s => s.weight !== null && s.reps !== null).length;
-            if (filledSets > ex.defaultSets) {
-                smartUpdates.push({
-                    exerciseId: ex.exercise_id,
-                    exerciseName: ex.exerciseName,
-                    actual: filledSets,
-                    default: ex.defaultSets,
-                });
+            for (const ex of activeExercises) {
+                const filledSets = ex.sets.filter(s => s.weight !== null && s.reps !== null).length;
+                if (filledSets > ex.defaultSets) {
+                    smartUpdates.push({
+                        exerciseId: ex.exercise_id,
+                        exerciseName: ex.exerciseName,
+                        actual: filledSets,
+                        default: ex.defaultSets,
+                    });
+                }
             }
-        }
 
-        return { error: null, smartUpdates };
+            return { error: null, smartUpdates };
+        } catch (err: any) {
+            setIsFinishing(false);
+            return { error: err.message || 'Failed to finish workout' };
+        }
     };
 
     const cancelWorkout = async () => {
         if (!session) return { error: 'No active session' };
-        const { error } = await supabase
-            .from('workout_sessions')
-            .delete()
-            .eq('id', session.id);
+        try {
+            const { error } = await supabase
+                .from('workout_sessions')
+                .delete()
+                .eq('id', session.id);
 
-        if (error) return { error: error.message };
-        clearWorkout();
-        return { error: null };
+            if (error) throw error;
+            clearWorkout();
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to cancel workout' };
+        }
     };
 
     const addExerciseToSession = async (exerciseId: string, exerciseName: string, defaultSets: number) => {
         if (!session) return { error: 'No active session' };
 
-        const { data: seData, error: seErr } = await supabase
-            .from('session_exercises')
-            .insert({ workout_session_id: session.id, exercise_id: exerciseId })
-            .select()
-            .single();
+        try {
+            const { data: seData, error: seErr } = await supabase
+                .from('session_exercises')
+                .insert({ workout_session_id: session.id, exercise_id: exerciseId })
+                .select()
+                .single();
 
-        if (seErr) return { error: seErr.message };
+            if (seErr) throw seErr;
 
-        const setsToCreate = Array.from({ length: defaultSets }, (_, i) => ({
-            session_exercise_id: seData.id,
-            set_number: i + 1,
-            weight: null,
-            reps: null,
-        }));
+            const setsToCreate = Array.from({ length: defaultSets }, (_, i) => ({
+                session_exercise_id: seData.id,
+                set_number: i + 1,
+                weight: null,
+                reps: null,
+            }));
 
-        const { data: setsData, error: setsErr } = await supabase
-            .from('sets')
-            .insert(setsToCreate)
-            .select();
+            const { data: setsData, error: setsErr } = await supabase
+                .from('sets')
+                .insert(setsToCreate)
+                .select();
 
-        if (setsErr) return { error: setsErr.message };
+            if (setsErr) throw setsErr;
 
-        const newEx: ActiveExercise = {
-            ...seData,
-            sets: setsData || [],
-            exerciseName,
-            defaultSets,
-        };
+            const newEx: ActiveExercise = {
+                ...seData,
+                sets: setsData || [],
+                exerciseName,
+                defaultSets,
+            };
 
-        setActiveExercises(prev => [...prev, newEx]);
-        return { error: null };
+            setActiveExercises(prev => [...prev, newEx]);
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to add exercise' };
+        }
     };
 
     const removeExerciseFromSession = async (sessionExerciseId: string) => {
         if (!session) return { error: 'No active session' };
 
-        // 1. Delete sets for this exercise
-        const { error: setsErr } = await supabase
-            .from('sets')
-            .delete()
-            .eq('session_exercise_id', sessionExerciseId);
+        try {
+            // 1. Delete sets for this exercise
+            const { error: setsErr } = await supabase
+                .from('sets')
+                .delete()
+                .eq('session_exercise_id', sessionExerciseId);
 
-        if (setsErr) return { error: setsErr.message };
+            if (setsErr) throw setsErr;
 
-        // 2. Delete the session_exercise
-        const { error: seErr } = await supabase
-            .from('session_exercises')
-            .delete()
-            .eq('id', sessionExerciseId);
+            // 2. Delete the session_exercise
+            const { error: seErr } = await supabase
+                .from('session_exercises')
+                .delete()
+                .eq('id', sessionExerciseId);
 
-        if (seErr) return { error: seErr.message };
+            if (seErr) throw seErr;
 
-        setActiveExercises(prev => prev.filter(ex => ex.id !== sessionExerciseId));
-        return { error: null };
+            setActiveExercises(prev => prev.filter(ex => ex.id !== sessionExerciseId));
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to remove exercise' };
+        }
     };
 
     const clearWorkout = () => {

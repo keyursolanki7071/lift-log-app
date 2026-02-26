@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, SectionList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, SectionList, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, ActivityIndicator, Button } from 'react-native-paper';
 import { AppModal } from '../components/AppModal';
 import { ChevronDown, Dumbbell, Clock, Activity, Trash2, Trophy } from 'lucide-react-native';
@@ -13,6 +13,7 @@ import { useWorkout } from '../hooks/useWorkout';
 import { appColors, appFonts, appTypography } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
 import { AnimatedScreen } from '../components/AnimatedScreen';
+import { useErrorToast } from '../components/ErrorToast';
 
 interface SessionItem {
     id: string; date: string; status: string; duration_minutes: number | null;
@@ -28,25 +29,32 @@ export const WorkoutHistoryScreen: React.FC<{ navigation: any }> = ({ navigation
     const [expandedData, setExpandedData] = useState<Record<string, any[]>>({});
     const [expandedVolume, setExpandedVolume] = useState<Record<string, number>>({});
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const { showError } = useErrorToast();
 
     const fetchSessions = useCallback(async () => {
         if (!user) return;
         setLoading(true);
-        const { data } = await supabase.from('workout_sessions')
-            .select('id, date, status, duration_minutes, template_id, template:workout_templates(name), session_exercises(id, exercise:exercises(name))')
-            .eq('user_id', user.id).eq('status', 'completed').order('date', { ascending: false }).limit(50);
+        try {
+            const { data, error } = await supabase.from('workout_sessions')
+                .select('id, date, status, duration_minutes, template_id, template:workout_templates(name), session_exercises(id, exercise:exercises(name))')
+                .eq('user_id', user.id).eq('status', 'completed').order('date', { ascending: false }).limit(50);
 
-        if (data) setSessions(data.map((s: any) => {
-            const fallbackName = s.session_exercises?.[0]?.exercise?.name
-                ? `${s.session_exercises[0].exercise.name} Session`
-                : 'Untitled';
-            return {
-                id: s.id, date: s.date, status: s.status, duration_minutes: s.duration_minutes,
-                template_id: s.template_id, templateName: s.template?.name || fallbackName,
-                exerciseCount: s.session_exercises?.length || 0,
-            };
-        }));
-        setLoading(false);
+            if (error) throw error;
+            if (data) setSessions(data.map((s: any) => {
+                const fallbackName = s.session_exercises?.[0]?.exercise?.name
+                    ? `${s.session_exercises[0].exercise.name} Session`
+                    : 'Untitled';
+                return {
+                    id: s.id, date: s.date, status: s.status, duration_minutes: s.duration_minutes,
+                    template_id: s.template_id, templateName: s.template?.name || fallbackName,
+                    exerciseCount: s.session_exercises?.length || 0,
+                };
+            }));
+        } catch {
+            showError('Failed to load workout history. Check your connection.');
+        } finally {
+            setLoading(false);
+        }
     }, [user]);
 
     useFocusEffect(useCallback(() => { fetchSessions(); }, [fetchSessions]));
@@ -56,22 +64,27 @@ export const WorkoutHistoryScreen: React.FC<{ navigation: any }> = ({ navigation
         if (expanded === id) { setExpanded(null); return; }
         setExpanded(id);
         if (!expandedData[id]) {
-            const { data } = await supabase.from('session_exercises')
-                .select('id, exercise:exercises(name, muscle_group), sets(weight, reps, set_number)')
-                .eq('workout_session_id', id).order('created_at');
-            if (data) {
-                let totalVol = 0;
-                const mapped = data.map((se: any) => {
-                    const sets = (se.sets || []).sort((a: any, b: any) => a.set_number - b.set_number);
-                    sets.forEach((s: any) => { totalVol += (s.weight || 0) * (s.reps || 0); });
-                    return {
-                        name: se.exercise?.name || 'Unknown',
-                        muscleGroup: se.exercise?.muscle_group || '',
-                        sets,
-                    };
-                });
-                setExpandedData(prev => ({ ...prev, [id]: mapped }));
-                setExpandedVolume(prev => ({ ...prev, [id]: totalVol }));
+            try {
+                const { data, error } = await supabase.from('session_exercises')
+                    .select('id, exercise:exercises(name, muscle_group), sets(weight, reps, set_number)')
+                    .eq('workout_session_id', id).order('created_at');
+                if (error) throw error;
+                if (data) {
+                    let totalVol = 0;
+                    const mapped = data.map((se: any) => {
+                        const sets = (se.sets || []).sort((a: any, b: any) => a.set_number - b.set_number);
+                        sets.forEach((s: any) => { totalVol += (s.weight || 0) * (s.reps || 0); });
+                        return {
+                            name: se.exercise?.name || 'Unknown',
+                            muscleGroup: se.exercise?.muscle_group || '',
+                            sets,
+                        };
+                    });
+                    setExpandedData(prev => ({ ...prev, [id]: mapped }));
+                    setExpandedVolume(prev => ({ ...prev, [id]: totalVol }));
+                }
+            } catch {
+                showError('Failed to load workout details.');
             }
         }
     };
@@ -80,12 +93,9 @@ export const WorkoutHistoryScreen: React.FC<{ navigation: any }> = ({ navigation
         if (!deleteId) return;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         const { error } = await deleteSession(deleteId);
-        if (!error) {
-            setSessions(prev => prev.filter(s => s.id !== deleteId));
-            setDeleteId(null);
-        } else {
-            Alert.alert('Error', error);
-        }
+        if (error) { showError(error); return; }
+        setSessions(prev => prev.filter(s => s.id !== deleteId));
+        setDeleteId(null);
     };
 
     const renderSwipeDelete = (id: string) => (

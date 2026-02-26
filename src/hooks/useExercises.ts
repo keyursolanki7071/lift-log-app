@@ -13,14 +13,19 @@ export const useExercises = () => {
         if (!user) return;
         setLoading(true);
         setError(null);
-        const { data, error: err } = await supabase
-            .from('exercises')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('name');
-        if (err) setError(err.message);
-        else setExercises(data || []);
-        setLoading(false);
+        try {
+            const { data, error: err } = await supabase
+                .from('exercises')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('name');
+            if (err) throw err;
+            setExercises(data || []);
+        } catch (err: any) {
+            setError(err.message || 'Failed to load exercises');
+        } finally {
+            setLoading(false);
+        }
     }, [user]);
 
     useEffect(() => {
@@ -29,40 +34,52 @@ export const useExercises = () => {
 
     const createExercise = async (name: string, muscleGroup: string, defaultSets: number = 3) => {
         if (!user) return { error: 'Not authenticated' };
-        const { data, error: err } = await supabase
-            .from('exercises')
-            .insert({ name, muscle_group: muscleGroup, default_sets: defaultSets, user_id: user.id })
-            .select()
-            .single();
-        if (err) return { error: err.message };
-        setExercises(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-        return { error: null, data };
+        try {
+            const { data, error: err } = await supabase
+                .from('exercises')
+                .insert({ name, muscle_group: muscleGroup, default_sets: defaultSets, user_id: user.id })
+                .select()
+                .single();
+            if (err) throw err;
+            setExercises(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+            return { error: null, data };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to create exercise' };
+        }
     };
 
     const updateExercise = async (id: string, updates: Partial<Pick<Exercise, 'name' | 'muscle_group' | 'default_sets'>>) => {
         if (!user) return { error: 'Not authenticated' };
-        const { data, error: err } = await supabase
-            .from('exercises')
-            .update(updates)
-            .eq('id', id)
-            .eq('user_id', user.id)
-            .select()
-            .single();
-        if (err) return { error: err.message };
-        setExercises(prev => prev.map(e => e.id === id ? data : e));
-        return { error: null, data };
+        try {
+            const { data, error: err } = await supabase
+                .from('exercises')
+                .update(updates)
+                .eq('id', id)
+                .eq('user_id', user.id)
+                .select()
+                .single();
+            if (err) throw err;
+            setExercises(prev => prev.map(e => e.id === id ? data : e));
+            return { error: null, data };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to update exercise' };
+        }
     };
 
     const deleteExercise = async (id: string) => {
         if (!user) return { error: 'Not authenticated' };
-        const { error: err } = await supabase
-            .from('exercises')
-            .delete()
-            .eq('id', id)
-            .eq('user_id', user.id);
-        if (err) return { error: err.message };
-        setExercises(prev => prev.filter(e => e.id !== id));
-        return { error: null };
+        try {
+            const { error: err } = await supabase
+                .from('exercises')
+                .delete()
+                .eq('id', id)
+                .eq('user_id', user.id);
+            if (err) throw err;
+            setExercises(prev => prev.filter(e => e.id !== id));
+            return { error: null };
+        } catch (err: any) {
+            return { error: err.message || 'Failed to delete exercise' };
+        }
     };
 
     return { exercises, loading, error, fetchExercises, createExercise, updateExercise, deleteExercise };

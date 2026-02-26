@@ -15,6 +15,7 @@ import { ActiveExerciseCard } from '../components/ActiveExerciseCard';
 import { AnimatedScreen } from '../components/AnimatedScreen';
 import { AnimatedListItem } from '../components/AnimatedListItem';
 import { triggerHaptic } from '../utils';
+import { useErrorToast } from '../components/ErrorToast';
 
 export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const {
@@ -35,6 +36,7 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
     const [completedSets, setCompletedSets] = useState<Set<string>>(new Set());
     const [localSets, setLocalSets] = useState<Record<string, { weight: string; reps: string }>>({});
     const { exercises, createExercise } = useExercises();
+    const { showError } = useErrorToast();
     const startTime = useRef(new Date()).current;
     const pendingSummaryRef = useRef<any>(null);
 
@@ -65,10 +67,11 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
     }, []);
 
     const handleSetDelete = React.useCallback(async (seId: string, setId: string) => {
-        await deleteSet(seId, setId);
+        const { error } = await deleteSet(seId, setId);
+        if (error) { showError(error); return; }
         setLocalSets(prev => { const n = { ...prev }; delete n[setId]; return n; });
         setCompletedSets(prev => { const n = new Set(prev); n.delete(setId); return n; });
-    }, [deleteSet]);
+    }, [deleteSet, showError]);
 
     const handleFinish = async () => {
         setShowFinishConfirm(false);
@@ -102,6 +105,7 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
         };
 
         const result = await finishWorkout(mins);
+        if (result.error) { showError(result.error); return; }
         if (result.smartUpdates && result.smartUpdates.length > 0) {
             pendingSummaryRef.current = workoutSummary;
             setSmartUpdates(result.smartUpdates);
@@ -114,7 +118,8 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
 
     const confirmRemoveExercise = async () => {
         if (exerciseToRemove) {
-            await removeExerciseFromSession(exerciseToRemove);
+            const { error } = await removeExerciseFromSession(exerciseToRemove);
+            if (error) { showError(error); return; }
             setExerciseToRemove(null);
         }
     };
@@ -122,12 +127,14 @@ export const ActiveWorkoutScreen: React.FC<{ navigation: any }> = ({ navigation 
     const handleCancel = async () => {
         setShowCancelConfirm(false);
         const { error } = await cancelWorkout();
-        if (!error) navigation.popToTop();
+        if (error) { showError(error); return; }
+        navigation.popToTop();
     };
 
     const handleAddExercise = async (ex: any) => {
         const { error } = await addExerciseToSession(ex.id, ex.name, ex.default_sets || 3);
-        if (!error) setShowExercisePicker(false);
+        if (error) { showError(error); return; }
+        setShowExercisePicker(false);
     };
 
     const handleCreateExercise = async () => {

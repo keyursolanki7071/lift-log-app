@@ -10,6 +10,8 @@ import { theme } from './src/theme';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { ErrorToastProvider } from './src/components/ErrorToast';
+
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();
 
@@ -38,8 +40,10 @@ export default function App() {
       <PaperProvider theme={theme}>
         <AuthProvider>
           <WorkoutProvider>
-            <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
-            <AppNavigator />
+            <ErrorToastProvider>
+              <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} />
+              <AppNavigator />
+            </ErrorToastProvider>
           </WorkoutProvider>
         </AuthProvider>
       </PaperProvider>

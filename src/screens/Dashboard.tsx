@@ -11,21 +11,29 @@ import { AnimatedScreen } from '../components/AnimatedScreen';
 import { triggerHaptic } from '../utils';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { useErrorToast } from '../components/ErrorToast';
+
 import { useDashboardStats } from '../hooks/useProgress';
 import { DashboardStatCard } from '../components/DashboardStatCard';
 
 export const DashboardScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const { user } = useAuth();
     const { getDashboardStats } = useDashboardStats();
+    const { showError } = useErrorToast();
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     const fetchStats = useCallback(async () => {
         if (!user) return;
         setLoading(true);
-        const data = await getDashboardStats();
-        setStats(data);
-        setLoading(false);
+        try {
+            const data = await getDashboardStats();
+            setStats(data);
+        } catch {
+            showError('Failed to load dashboard. Check your connection.');
+        } finally {
+            setLoading(false);
+        }
     }, [user, getDashboardStats]);
 
     useFocusEffect(

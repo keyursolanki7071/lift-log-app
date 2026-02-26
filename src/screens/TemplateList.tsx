@@ -9,9 +9,11 @@ import { MotiPressable } from 'moti/interactions';
 import { useTemplates } from '../hooks/useTemplates';
 import { appColors, appFonts, appTypography } from '../theme';
 import { AnimatedScreen } from '../components/AnimatedScreen';
+import { useErrorToast } from '../components/ErrorToast';
 
 export const TemplateListScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     const { templates, createTemplate, deleteTemplate } = useTemplates();
+    const { showError } = useErrorToast();
     const [showCreate, setShowCreate] = useState(false);
     const [newName, setNewName] = useState('');
     const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -22,7 +24,8 @@ export const TemplateListScreen: React.FC<{ navigation: any }> = ({ navigation }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         const result = await createTemplate(newName.trim());
         setShowCreate(false); setNewName('');
-        if (result && !result.error && result.data) {
+        if (result?.error) { showError(result.error); return; }
+        if (result?.data) {
             navigation.navigate('TemplateBuilder', { templateId: result.data.id, templateName: result.data.name });
         }
     };

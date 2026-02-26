@@ -11,11 +11,13 @@ import { ExerciseModal } from '../components/ExerciseModal';
 import { ExerciseItem } from '../components/ExerciseItem';
 import { appColors, appFonts, appTypography } from '../theme';
 import { AnimatedScreen } from '../components/AnimatedScreen';
+import { useErrorToast } from '../components/ErrorToast';
 
 const FILTER_ALL = 'All';
 
 export const ExercisesScreen: React.FC = () => {
     const { exercises, createExercise, updateExercise, deleteExercise } = useExercises();
+    const { showError } = useErrorToast();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState(FILTER_ALL);
     const [modalVisible, setModalVisible] = useState(false);
@@ -39,8 +41,10 @@ export const ExercisesScreen: React.FC = () => {
     }, [exercises, searchQuery, activeFilter]);
 
     const handleSave = async (name: string, category: string, defaultSets: number) => {
-        if (editingExercise) await updateExercise(editingExercise.id, { name, muscle_group: category, default_sets: defaultSets });
-        else await createExercise(name, category, defaultSets);
+        let result;
+        if (editingExercise) result = await updateExercise(editingExercise.id, { name, muscle_group: category, default_sets: defaultSets });
+        else result = await createExercise(name, category, defaultSets);
+        if (result?.error) { showError(result.error); return; }
         setModalVisible(false); setEditingExercise(null);
     };
 
